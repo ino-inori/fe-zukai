@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>擬似言語のトレース | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .tracer { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .tracer { grid-template-columns: 1fr; } }
+  .code {
+    font: 14.5px/1.85 "Consolas", "SFMono-Regular", monospace; background: var(--surface-2); border-radius: 10px;
+    padding: 8px 0; overflow-x: auto; margin: 0;
+  }
+  .code .ln { display: block; padding: 0 12px 0 0; white-space: pre; border-left: 4px solid transparent; }
+  .code .ln .no { display: inline-block; width: 34px; text-align: right; margin-right: 12px; color: var(--muted); user-select: none; }
+  .code .ln.cur { background: var(--on-soft); border-left-color: var(--on); font-weight: 700; }
+  .code .kw { color: var(--accent); }
+  .code .cm { color: var(--muted); }
+  .panel-title { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+  .vars { display: flex; flex-wrap: wrap; gap: 8px; }
+  .var { background: var(--surface-2); border: 2px solid transparent; border-radius: 10px; padding: 4px 12px; min-width: 70px; }
+  .var small { display: block; font-size: 12px; color: var(--muted); font-family: "Consolas", monospace; }
+  .var b { font: 700 20px "Consolas", monospace; }
+  .var.chg { border-color: var(--on); background: var(--on-soft); }
+  .arr { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+  .cell { width: 44px; text-align: center; }
+  .cell .box { border: 2px solid var(--border); border-radius: 8px; font: 700 18px "Consolas", monospace; padding: 4px 0; background: var(--surface); }
+  .cell .box.chg { border-color: var(--on); background: var(--on-soft); }
+  .cell .box.ptr { border-color: var(--accent); }
+  .cell .idx { font-size: 11px; color: var(--muted); }
+  .cell .pt { font: 700 12px "Consolas", monospace; color: var(--accent); min-height: 17px; line-height: 1.3; }
+  .stack { display: flex; flex-direction: column-reverse; gap: 4px; }
+  .frame { border: 1px solid var(--border); border-radius: 8px; padding: 3px 10px; font: 14px "Consolas", monospace; background: var(--surface-2); }
+  .frame.top { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+  .note-box { background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 12px; min-height: 52px; }
+  .note-box .stepno { color: var(--accent); font-weight: 700; margin-right: 6px; }
+  .result { margin-top: 10px; font-size: 17px; }
+  .predict { margin-top: 10px; padding: 10px 14px; border: 2px dashed var(--on); border-radius: 10px; }
+  .predict .ans { font-weight: 700; margin-left: 8px; }
+  .trace-wrap { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .trace-wrap table.tt { margin: 0; width: 100%; }
+  .trace-wrap th { position: sticky; top: 0; }
+  .trace-wrap td.chg { color: var(--on); font-weight: 700; }
+  .trace-wrap tr.now td { background: var(--on-soft); }
+  .inputs { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .inputs input { width: 170px; }
+  .inputs .err { color: var(--ng); font-size: 14px; }
+  pre.mini { font: 14px/1.7 "Consolas", monospace; background: var(--surface-2); border-radius: 8px; padding: 8px 12px; margin: 8px 0; overflow-x: auto; font-weight: 400; }
+  table.info td code { white-space: nowrap; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › アルゴリズムとデータ構造</div>
+  <h1 class="page-title">擬似言語のトレース（科目B）</h1>
+  <p class="page-lead">科目Bのアルゴリズム問題は、プログラムを1行ずつ実行したつもりで<b>変数の値の変化を追う（トレースする）</b>力が全て。1ステップずつ実行して、変数と配列がどう変わるか見てみましょう。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#tracer">トレース体験</a><a href="#syntax">擬似言語の書き方</a><a href="#tips">トレースのコツ</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="tracer">1行ずつ実行してみよう</h2>
+  <div class="card">
+    <div class="seg" id="prog-tabs"></div>
+    <p id="prog-desc" style="margin-top:0"></p>
+    <div class="inputs" id="inputs"></div>
+
+    <div class="tracer" style="margin-top:12px">
+      <div>
+        <p class="panel-title">プログラム（オレンジの行がいま実行している行）</p>
+        <pre class="code" id="code"></pre>
+      </div>
+      <div>
+        <div id="stack-area" hidden>
+          <p class="panel-title">呼び出しの積み重なり（上が実行中）</p>
+          <div class="stack" id="stack"></div>
+        </div>
+        <p class="panel-title" style="margin-top:8px">変数</p>
+        <div class="vars" id="vars"></div>
+        <div id="arrays"></div>
+        <div class="result" id="result"></div>
+      </div>
+    </div>
+
+    <div class="note-box" id="note"></div>
+    <div class="predict" id="predict" hidden></div>
+    <div class="btn-row">
+      <button class="btn" id="b-first" type="button" title="最初へ">⏮</button>
+      <button class="btn" id="b-prev" type="button">◀ 戻る</button>
+      <button class="btn primary" id="b-next" type="button">次へ ▶</button>
+      <button class="btn" id="b-play" type="button">▶ 自動再生</button>
+      <span class="note" id="progress"></span>
+      <span style="flex:1"></span>
+      <label class="note"><input type="checkbox" id="predict-mode"> 予想モード（値が変わる前に答える）</label>
+    </div>
+    <p class="note" id="predict-score"></p>
+
+    <h3>トレース表</h3>
+    <p class="note" style="margin-top:0">試験では、この表を問題用紙の余白に自分で書きながら解きます。オレンジは、その手順で値が変わった変数。</p>
+    <div class="trace-wrap"><table class="tt" id="trace"></table></div>
+  </div>
+
+  <h2 id="syntax">擬似言語の書き方（よく出る記法）</h2>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th>書き方</th><th>意味</th></tr>
+      <tr><td><code>○整数型: f(整数型: n)</code></td><td>手続・関数の宣言。「整数型の値を返す関数 f。引数は整数 n」</td></tr>
+      <tr><td><code>整数型: x ← 0</code></td><td>変数の宣言と初期化。<b>← は代入</b>（右の値を左の変数に入れる）</td></tr>
+      <tr><td><code>if (条件) … elseif (条件) … else … endif</code></td><td>条件分岐。上から順に調べ、最初に当てはまったところだけ実行</td></tr>
+      <tr><td><code>while (条件) … endwhile</code></td><td>条件が成り立つ間、繰り返す（最初に条件を判定）</td></tr>
+      <tr><td><code>do … while (条件)</code></td><td>先に1回実行してから、条件を判定して繰り返す</td></tr>
+      <tr><td><code>for (i を 1 から n まで 1 ずつ増やす)</code></td><td>i を 1, 2, …, n と変えながら繰り返す</td></tr>
+      <tr><td><code>data[i]</code>、<code>dataの要素数</code></td><td>配列の i 番目の要素。<b>要素番号は 1 から始まる</b>（特に断りがない限り）</td></tr>
+      <tr><td><code>{3, 8, 2}</code></td><td>配列の中身の書き方</td></tr>
+      <tr><td><code>a mod b</code>、<code>a ÷ b</code></td><td>mod は割り算の余り（7 mod 3 = 1）。÷ は割り算</td></tr>
+      <tr><td><code>＝ ≠ ≦ ≧ and or not</code></td><td>比較と論理演算。「＝」は代入ではなく「等しい」の比較</td></tr>
+      <tr><td><code>return x</code></td><td>x を戻り値にして、関数を終える</td></tr>
+      <tr><td><code>/* … */</code></td><td>注釈（コメント）。実行には関係しない</td></tr>
+    </table>
+  </div>
+
+  <h2 id="tips">トレースのコツ</h2>
+  <div class="card">
+    <h3>① 変数を列に並べた表を書く</h3>
+    <p>頭の中だけで追うと必ずどこかで間違えます。上のトレース表のように、<b>変数ごとに列を作り、値が変わるたびに1行書く</b>のが確実です。</p>
+    <h3>② ループは「1回目・2回目・最後の1回」に注目</h3>
+    <p>ループの最初と最後（境界）で間違えやすい。「i が n のときに中に入るか？」「終わった時点での値は？」を丁寧に確認しましょう。</p>
+    <h3>③ 配列の要素番号は 1 から</h3>
+    <p>プログラミング言語（C や Python）は 0 から数えますが、試験の擬似言語は<b>1 から</b>です。data[1] が先頭。</p>
+    <h3>④ 再帰は「呼び出しを積み重ねて、戻りながら計算」</h3>
+    <p>自分自身を呼ぶ関数（再帰）は、上の「階乗」で呼び出しの積み重なりを確認しましょう。いちばん奥まで呼んでから、戻るときに掛け算されていきます。</p>
+    <h3>⑤ 選択肢から逆算するのもアリ</h3>
+    <p>「空欄に入る式」を問う問題は、選択肢を1つずつ当てはめて、小さな具体例（要素数3くらい）でトレースすると速く確実に解けます。</p>
+  </div>
+
+  <h2 id="quiz">確認問題（トレース練習）</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // ---- トレーサ：プログラムを実行しながら各手順の状態を記録する ----
+  function makeTracer() {
+    const S = { frames: [], changed: [], v: null };
+    const clone = vars => JSON.parse(JSON.stringify(vars, (k, x) => (x === undefined ? null : x)));
+    S.call = (name, vars) => {
+      S.frames.push({ name, vars: { ...vars } });
+      S.v = S.frames[S.frames.length - 1].vars;
+      S.changed = Object.keys(vars).map(n => ({ name: n }));
+    };
+    S.decl = (...names) => names.forEach(n => { if (!(n in S.v)) S.v[n] = undefined; });
+    S.set = (name, val) => { S.v[name] = val; S.changed.push({ name }); };
+    S.setAt = (name, idx, val) => { S.v[name][idx - 1] = val; S.changed.push({ name, idx }); };
+    S.at = (line, note) => {
+      const snap = { line, note, frames: S.frames.map(f => ({ name: f.name, vars: clone(f.vars) })), changed: S.changed };
+      S.changed = [];
+      return snap;
+    };
+    S.ret = val => { S.frames.pop(); S.v = S.frames.length ? S.frames[S.frames.length - 1].vars : null; return val; };
+    return S;
+  }
+
+  // ---- 入力の読み取り ----
+  const parseArray = (s, min = 2, max = 8) => {
+    const a = s.split(/[,、\s]+/).filter(Boolean).map(Number);
+    if (a.length < min || a.length > max || a.some(x => !Number.isInteger(x) || Math.abs(x) > 99)) throw `整数を ${min}〜${max} 個、カンマ区切りで入力してください（-99〜99）`;
+    return a;
+  };
+  const parseInt1 = (s, lo, hi) => {
+    const n = Number(s);
+    if (!Number.isInteger(n) || n < lo || n > hi) throw `${lo}〜${hi} の整数を入力してください`;
+    return n;
+  };
+
+  // ---- サンプルプログラム ----
+  const PROGRAMS = [
+    {
+      id: 'sum', tab: '合計', desc: '配列の要素を全部足す。<b>for ループの基本</b>。',
+      code: [
+        '○整数型: sum(整数型の配列: data)',
+        '  整数型: total ← 0',
+        '  整数型: i',
+        '  for (i を 1 から dataの要素数 まで 1 ずつ増やす)',
+        '    total ← total + data[i]',
+        '  endfor',
+        '  return total',
+      ],
+      inputs: [{ key: 'data', label: 'data', def: '3, 8, 2, 5', parse: s => parseArray(s) }],
+      cols: ['i', 'total'], ptr: { data: [['i', v => v.i]] },
+      run: function* (S, { data }) {
+        S.call('sum', { data });
+        yield S.at(0, `関数 sum が呼ばれ、配列 data = {${data.join(', ')}} を受け取ります。`);
+        S.set('total', 0); yield S.at(1, 'total を 0 で初期化します。');
+        S.decl('i'); yield S.at(2, 'i を宣言します（まだ値は入っていません）。');
+        const n = data.length;
+        for (let i = 1; i <= n; i++) {
+          S.set('i', i); yield S.at(3, `i ← ${i}。i は要素数 ${n} 以下なので、繰り返しの中へ。`);
+          const t = S.v.total;
+          S.set('total', t + data[i - 1]); yield S.at(4, `total ← total + data[${i}] = ${t} + ${data[i - 1]} = ${S.v.total}`);
+        }
+        yield S.at(5, `i を増やすと要素数 ${n} を超えるので、繰り返しを終えます。`);
+        yield S.at(6, `total（${S.v.total}）を戻り値として返します。`);
+        return S.v.total;
+      },
+    },
+    {
+      id: 'max', tab: '最大値', desc: '配列の中で一番大きい値を探す。<b>ループの中の if</b>。',
+      code: [
+        '○整数型: maxValue(整数型の配列: data)',
+        '  整数型: max ← data[1]',
+        '  整数型: i',
+        '  for (i を 2 から dataの要素数 まで 1 ずつ増やす)',
+        '    if (data[i] > max)',
+        '      max ← data[i]',
+        '    endif',
+        '  endfor',
+        '  return max',
+      ],
+      inputs: [{ key: 'data', label: 'data', def: '4, 7, 2, 9, 6', parse: s => parseArray(s) }],
+      cols: ['i', 'max'], ptr: { data: [['i', v => v.i]] },
+      run: function* (S, { data }) {
+        S.call('maxValue', { data });
+        yield S.at(0, `配列 data = {${data.join(', ')}} を受け取ります。`);
+        S.set('max', data[0]); yield S.at(1, `とりあえず先頭 data[1]（${data[0]}）を「暫定の最大値」にします。`);
+        S.decl('i'); yield S.at(2, 'i を宣言します。');
+        const n = data.length;
+        for (let i = 2; i <= n; i++) {
+          S.set('i', i); yield S.at(3, `i ← ${i}。2番目から順に比べていきます。`);
+          const big = data[i - 1] > S.v.max;
+          yield S.at(4, `data[${i}]（${data[i - 1]}）> max（${S.v.max}）？ → <b>${big ? '成り立つ' : '成り立たない'}</b>`);
+          if (big) { S.set('max', data[i - 1]); yield S.at(5, `max を ${data[i - 1]} に更新します。`); }
+          yield S.at(6, 'if の終わり。');
+        }
+        yield S.at(7, '全要素を調べ終えたので、繰り返しを終えます。');
+        yield S.at(8, `max（${S.v.max}）を返します。`);
+        return S.v.max;
+      },
+    },
+    {
+      id: 'gcd', tab: '最大公約数', desc: 'ユークリッドの互除法。<b>while ループと mod（余り）</b>。',
+      code: [
+        '○整数型: gcd(整数型: a, 整数型: b)',
+        '  整数型: r',
+        '  while (b ≠ 0)',
+        '    r ← a mod b',
+        '    a ← b',
+        '    b ← r',
+        '  endwhile',
+        '  return a',
+      ],
+      inputs: [
+        { key: 'a', label: 'a', def: '48', parse: s => parseInt1(s, 1, 9999) },
+        { key: 'b', label: 'b', def: '18', parse: s => parseInt1(s, 1, 9999) },
+      ],
+      cols: ['a', 'b', 'r'],
+      run: function* (S, { a, b }) {
+        S.call('gcd', { a, b });
+        yield S.at(0, `a = ${a}, b = ${b} を受け取ります。`);
+        S.decl('r'); yield S.at(1, 'r を宣言します。');
+        while (true) {
+          const go = S.v.b !== 0;
+          yield S.at(2, `b（${S.v.b}）≠ 0 ？ → <b>${go ? '成り立つので繰り返す' : '成り立たないので終了'}</b>`);
+          if (!go) break;
+          S.set('r', S.v.a % S.v.b); yield S.at(3, `r ← ${S.v.a} mod ${S.v.b} = ${S.v.r}（割り算の余り）`);
+          S.set('a', S.v.b); yield S.at(4, `a ← b（${S.v.a}）`);
+          S.set('b', S.v.r); yield S.at(5, `b ← r（${S.v.b}）`);
+          yield S.at(6, 'while の先頭に戻って条件を確認します。');
+        }
+        yield S.at(7, `a（${S.v.a}）が最大公約数です。`);
+        return S.v.a;
+      },
+    },
+    {
+      id: 'bubble', tab: 'バブルソート', desc: '隣どうしを比べて、大きい方を後ろへ送る並べ替え。<b>二重ループと値の交換</b>。',
+      code: [
+        '○bubbleSort(整数型の配列: data)',
+        '  整数型: i, j, tmp',
+        '  for (i を dataの要素数 から 2 まで 1 ずつ減らす)',
+        '    for (j を 1 から i − 1 まで 1 ずつ増やす)',
+        '      if (data[j] > data[j + 1])',
+        '        tmp ← data[j]',
+        '        data[j] ← data[j + 1]',
+        '        data[j + 1] ← tmp',
+        '      endif',
+        '    endfor',
+        '  endfor',
+      ],
+      inputs: [{ key: 'data', label: 'data', def: '5, 3, 4, 1', parse: s => parseArray(s, 2, 6) }],
+      cols: ['i', 'j', 'tmp', 'data'], ptr: { data: [['j', v => v.j], ['j+1', v => (v.j == null ? null : v.j + 1)]] },
+      run: function* (S, { data }) {
+        S.call('bubbleSort', { data: data.slice() });
+        yield S.at(0, `配列 data = {${data.join(', ')}} を小さい順に並べ替えます。`);
+        S.decl('i', 'j', 'tmp'); yield S.at(1, '変数を宣言します。');
+        const d = S.v.data, n = d.length;
+        for (let i = n; i >= 2; i--) {
+          S.set('i', i); yield S.at(2, `i ← ${i}。data[1]〜data[${i}] の範囲で、一番大きい値を data[${i}] へ送ります。`);
+          for (let j = 1; j <= i - 1; j++) {
+            S.set('j', j); yield S.at(3, `j ← ${j}`);
+            const sw = d[j - 1] > d[j];
+            yield S.at(4, `data[${j}]（${d[j - 1]}）> data[${j + 1}]（${d[j]}）？ → <b>${sw ? '成り立つので交換' : '成り立たないので何もしない'}</b>`);
+            if (sw) {
+              S.set('tmp', d[j - 1]); yield S.at(5, `交換の準備：tmp に data[${j}]（${S.v.tmp}）を退避します。`);
+              S.setAt('data', j, d[j]); yield S.at(6, `data[${j}] ← data[${j + 1}]（${d[j - 1]}）`);
+              S.setAt('data', j + 1, S.v.tmp); yield S.at(7, `data[${j + 1}] ← tmp（${S.v.tmp}）。交換完了！`);
+            }
+            yield S.at(8, 'if の終わり。');
+          }
+          yield S.at(9, `内側のループ終了。data[${i}] の値（${d[i - 1]}）が確定しました。`);
+        }
+        yield S.at(10, `並べ替え完了：{${d.join(', ')}}`);
+      },
+    },
+    {
+      id: 'binary', tab: '2分探索', desc: '並んだ配列の真ん中を見て、探す範囲を半分ずつ狭める。<b>while と elseif</b>。',
+      code: [
+        '○整数型: search(整数型の配列: data, 整数型: target)',
+        '  整数型: low ← 1',
+        '  整数型: high ← dataの要素数',
+        '  整数型: mid',
+        '  while (low ≦ high)',
+        '    mid ← (low + high) ÷ 2 の商',
+        '    if (data[mid] ＝ target)',
+        '      return mid',
+        '    elseif (data[mid] < target)',
+        '      low ← mid + 1',
+        '    else',
+        '      high ← mid − 1',
+        '    endif',
+        '  endwhile',
+        '  return −1  /* 見つからなかった */',
+      ],
+      inputs: [
+        { key: 'data', label: 'data（自動で昇順に）', def: '3, 8, 12, 17, 21, 25, 30', parse: s => parseArray(s, 2, 8).sort((x, y) => x - y) },
+        { key: 'target', label: 'target', def: '25', parse: s => parseInt1(s, -99, 99) },
+      ],
+      cols: ['low', 'high', 'mid'], ptr: { data: [['low', v => v.low], ['mid', v => v.mid], ['high', v => v.high]] },
+      run: function* (S, { data, target }) {
+        S.call('search', { data, target });
+        yield S.at(0, `昇順の配列 data = {${data.join(', ')}} から ${target} を探します。`);
+        S.set('low', 1); yield S.at(1, '探す範囲の左端 low を 1 にします。');
+        S.set('high', data.length); yield S.at(2, `探す範囲の右端 high を要素数（${data.length}）にします。`);
+        S.decl('mid'); yield S.at(3, 'mid を宣言します。');
+        while (true) {
+          const go = S.v.low <= S.v.high;
+          yield S.at(4, `low（${S.v.low}）≦ high（${S.v.high}）？ → <b>${go ? '成り立つ（まだ探す範囲がある）' : '成り立たない（範囲がなくなった）'}</b>`);
+          if (!go) break;
+          const { low, high } = S.v;
+          S.set('mid', Math.floor((low + high) / 2)); yield S.at(5, `mid ← (${low} + ${high}) ÷ 2 の商 = ${S.v.mid}。真ん中を見ます。`);
+          const m = data[S.v.mid - 1];
+          if (m === target) { yield S.at(6, `data[${S.v.mid}]（${m}）＝ ${target} → <b>見つかった！</b>`); yield S.at(7, `${S.v.mid} を返します。`); return S.v.mid; }
+          yield S.at(6, `data[${S.v.mid}]（${m}）＝ ${target}？ → 成り立たない`);
+          if (m < target) {
+            yield S.at(8, `data[${S.v.mid}]（${m}）< ${target} → 成り立つ。target は右半分にある。`);
+            S.set('low', S.v.mid + 1); yield S.at(9, `low ← ${S.v.low}（左半分を捨てる）`);
+          } else {
+            yield S.at(8, `data[${S.v.mid}]（${m}）< ${target} → 成り立たない。target は左半分にある。`);
+            yield S.at(10, 'else へ。');
+            S.set('high', S.v.mid - 1); yield S.at(11, `high ← ${S.v.high}（右半分を捨てる）`);
+          }
+          yield S.at(12, 'if の終わり。while の先頭へ戻ります。');
+        }
+        yield S.at(14, '見つからなかったので −1 を返します。');
+        return -1;
+      },
+    },
+    {
+      id: 'fact', tab: '階乗（再帰）', desc: 'n! = n × (n−1) × … × 1 を、<b>自分自身を呼び出す（再帰）</b>で計算する。',
+      code: [
+        '○整数型: factorial(整数型: n)',
+        '  if (n ≦ 1)',
+        '    return 1',
+        '  endif',
+        '  return n × factorial(n − 1)',
+      ],
+      inputs: [{ key: 'n', label: 'n', def: '4', parse: s => parseInt1(s, 1, 7) }],
+      cols: [{ label: '深さ', fn: s => s.frames.length }, 'n'], recursive: true,
+      run: function* fact(S, { n }) {
+        S.call(`factorial(${n})`, { n });
+        yield S.at(0, `factorial(${n}) が呼ばれました。`);
+        const small = n <= 1;
+        yield S.at(1, `n（${n}）≦ 1 ？ → <b>${small ? '成り立つ' : '成り立たない'}</b>`);
+        if (small) { yield S.at(2, '1 を返します。ここが一番奥（これ以上呼び出さない）。'); return S.ret(1); }
+        yield S.at(4, `${n} × factorial(${n - 1}) を計算したいので、まず factorial(${n - 1}) を呼び出します。`);
+        const r = yield* fact(S, { n: n - 1 });
+        yield S.at(4, `factorial(${n - 1}) から ${r} が返ってきました。${n} × ${r} = ${n * r} を返します。`);
+        return S.ret(n * r);
+      },
+    },
+  ];
+
+  // ---- 状態 ----
+  let prog = PROGRAMS[0], snaps = [], idx = 0, timer = null, finalValue;
+  let pred = { ok: 0, total: 0 };
+
+  function build() {
+    const args = {};
+    let err = '';
+    prog.inputs.forEach(inp => {
+      try { args[inp.key] = inp.parse($('in-' + inp.key).value); } catch (e) { err = e; }
+    });
+    $('in-err').textContent = err;
+    if (err) return false;
+    const S = makeTracer();
+    const gen = prog.run(S, args);
+    snaps = [];
+    let r;
+    while (!(r = gen.next()).done && snaps.length < 600) snaps.push(r.value);
+    finalValue = r.value;
+    const last = snaps[snaps.length - 1];
+    snaps.push({ line: -1, frames: last.frames, changed: [], done: true,
+      note: finalValue === undefined ? '実行終了。' : `実行終了。戻り値は <b>${finalValue}</b> です。` });
+    idx = 0;
+    pred = { ok: 0, total: 0 };
+    return true;
+  }
+
+  function selectProgram(p) {
+    stop();
+    prog = p;
+    document.querySelectorAll('#prog-tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === p.id));
+    $('prog-desc').innerHTML = p.desc;
+    $('inputs').innerHTML = p.inputs.map(inp =>
+      `<label>${inp.label} = <input type="text" id="in-${inp.key}" value="${inp.def}"></label>`).join('') +
+      '<button class="btn" id="in-run" type="button">この値で実行し直す</button><span class="err" id="in-err"></span>';
+    $('in-run').addEventListener('click', () => { stop(); if (build()) render(); });
+    p.inputs.forEach(inp => $('in-' + inp.key).addEventListener('keydown', e => { if (e.key === 'Enter') $('in-run').click(); }));
+    $('stack-area').hidden = !p.recursive;
+    build();
+    render();
+  }
+
+  function highlight(line) {
+    let h = esc(line);
+    h = h.replace(/(\/\*.*\*\/)/, '<span class="cm">$1</span>');
+    h = h.replace(/\b(if|elseif|else|endif|while|endwhile|for|endfor|return|do)\b/g, '<span class="kw">$1</span>');
+    return h;
+  }
+
+  const show = v => (v === null || v === undefined ? '—' : Array.isArray(v) ? `{${v.join(', ')}}` : v);
+  const colLabel = c => (typeof c === 'string' ? c : c.label);
+  const colValue = (c, s) => {
+    if (typeof c !== 'string') return c.fn(s);
+    const top = s.frames[s.frames.length - 1];
+    return top ? show(top.vars[c]) : '—';
+  };
+  const colChanged = (c, s) => typeof c === 'string' && s.changed.some(x => x.name === c);
+
+  function render() {
+    const s = snaps[idx];
+    const top = s.frames[s.frames.length - 1];
+
+    $('code').innerHTML = prog.code.map((l, i) =>
+      `<span class="ln${i === s.line ? ' cur' : ''}"><span class="no">${i + 1}</span>${highlight(l)}</span>`).join('');
+
+    // 変数（配列以外）
+    const vars = top ? top.vars : {};
+    $('vars').innerHTML = Object.keys(vars).filter(k => !Array.isArray(vars[k])).map(k =>
+      `<div class="var${s.changed.some(c => c.name === k && c.idx === undefined) ? ' chg' : ''}"><small>${k}</small><b>${show(vars[k])}</b></div>`).join('') || '<span class="note">（まだ変数はありません）</span>';
+
+    // 配列
+    $('arrays').innerHTML = Object.keys(vars).filter(k => Array.isArray(vars[k])).map(k => {
+      const ptrs = (prog.ptr && prog.ptr[k]) || [];
+      const cells = vars[k].map((x, i) => {
+        const here = ptrs.filter(([, fn]) => fn(vars) === i + 1).map(([lab]) => lab);
+        const chg = s.changed.some(c => c.name === k && c.idx === i + 1);
+        return `<div class="cell"><div class="idx">[${i + 1}]</div><div class="box${chg ? ' chg' : here.length ? ' ptr' : ''}">${x}</div><div class="pt">${here.join('<br>')}</div></div>`;
+      }).join('');
+      return `<p class="panel-title" style="margin-top:12px">配列 ${k}</p><div class="arr">${cells}</div>`;
+    }).join('');
+
+    if (prog.recursive) {
+      $('stack').innerHTML = s.frames.map((f, i) =>
+        `<div class="frame${i === s.frames.length - 1 && !s.done ? ' top' : ''}">${f.name}</div>`).join('');
+    }
+    $('result').innerHTML = s.done && finalValue !== undefined ? `戻り値：<b class="mono" style="font-size:22px">${finalValue}</b>` : '';
+    $('note').innerHTML = `<span class="stepno">手順 ${idx + 1}</span>${s.note}`;
+    $('progress').textContent = `${idx + 1} / ${snaps.length}`;
+    $('b-prev').disabled = $('b-first').disabled = idx === 0;
+    $('b-next').disabled = idx === snaps.length - 1;
+    $('predict-score').textContent = pred.total ? `予想の正解：${pred.ok} / ${pred.total}` : '';
+
+    // トレース表
+    const cols = prog.cols;
+    let t = '<tr><th>手順</th><th>行</th>' + cols.map(c => `<th>${colLabel(c)}</th>`).join('') + '</tr>';
+    for (let i = 0; i <= idx; i++) {
+      const r = snaps[i];
+      t += `<tr${i === idx ? ' class="now"' : ''}><td>${i + 1}</td><td>${r.line >= 0 ? r.line + 1 : '終'}</td>` +
+        cols.map(c => {
+          const chg = colChanged(c, r) || (c === 'data' && r.changed.some(x => x.name === 'data' && x.idx));
+          return `<td class="${chg ? 'chg' : ''}">${colValue(c, r)}</td>`;
+        }).join('') + '</tr>';
+    }
+    $('trace').innerHTML = t;
+    const wrap = $('trace').parentElement, now = $('trace').querySelector('tr.now');
+    if (now) wrap.scrollTop = now.offsetTop - wrap.clientHeight + now.offsetHeight + 4;
+  }
+
+  // ---- 予想モード：次の手順で値が変わる変数を先に答える ----
+  function predictTarget(next) {
+    const top = next.frames[next.frames.length - 1];
+    if (!top || idx === 0) return null;
+    for (const c of next.changed) {
+      const val = c.idx ? top.vars[c.name][c.idx - 1] : top.vars[c.name];
+      if (typeof val === 'number') return { label: c.idx ? `${c.name}[${c.idx}]` : c.name, val };
+    }
+    return null;
+  }
+  function goNext() {
+    if (idx >= snaps.length - 1) return;
+    const target = $('predict-mode').checked && predictTarget(snaps[idx + 1]);
+    if (!target) { idx++; render(); return; }
+    const box = $('predict');
+    box.hidden = false;
+    box.innerHTML = `<b>予想：</b>次の手順（${snaps[idx + 1].line + 1}行目）で <b class="mono">${target.label}</b> はいくつになる？
+      <input type="text" id="pred-in" inputmode="numeric" style="width:90px"> <button class="btn primary" id="pred-ok" type="button">答え合わせ</button>`;
+    $('b-next').disabled = true;
+    const input = $('pred-in');
+    input.focus();
+    const check = () => {
+      const ok = Number(input.value) === target.val && input.value.trim() !== '';
+      pred.total++; if (ok) pred.ok++;
+      box.innerHTML = `<span class="ans" style="color:var(--${ok ? 'ok' : 'ng'})">${ok ? '○ 正解！' : `× 正解は ${target.val}`}</span>`;
+      idx++; render();
+      setTimeout(() => { if (box.innerHTML.includes('class="ans"')) box.hidden = true; }, ok ? 900 : 2200);
+    };
+    $('pred-ok').addEventListener('click', check);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+  }
+
+  function stop() { clearInterval(timer); timer = null; $('b-play').textContent = '▶ 自動再生'; }
+  $('b-next').addEventListener('click', () => { stop(); goNext(); });
+  $('b-prev').addEventListener('click', () => { stop(); $('predict').hidden = true; if (idx > 0) { idx--; render(); } });
+  $('b-first').addEventListener('click', () => { stop(); $('predict').hidden = true; idx = 0; render(); });
+  $('b-play').addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    $('predict-mode').checked = false;
+    $('predict').hidden = true;
+    if (idx === snaps.length - 1) idx = 0;
+    render();
+    $('b-play').textContent = '❚❚ 停止';
+    timer = setInterval(() => { if (idx >= snaps.length - 1) { stop(); return; } idx++; render(); }, 1100);
+  });
+
+  PROGRAMS.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.id = p.id;
+    b.textContent = p.tab;
+    b.addEventListener('click', () => selectProgram(p));
+    $('prog-tabs').appendChild(b);
+  });
+  selectProgram(PROGRAMS[0]);
+
+  // ---- 確認問題 ----
+  const pre = s => `<pre class="mini">${esc(s)}</pre>`;
+  FE.quiz($('quiz'), 'pseudo', [
+    { q: '次のプログラムを実行した後の x の値はいくつか。' + pre('整数型: x ← 1\n整数型: i\nfor (i を 1 から 4 まで 1 ずつ増やす)\n  x ← x × 2\nendfor'),
+      choices: ['4', '8', '16', '32'], answer: 2,
+      explain: 'x は 1 → 2 → 4 → 8 → 16 と、ループ4回で2倍を4回繰り返します。2<sup>4</sup> = 16。' },
+    { q: '次のプログラムを実行した後の a の値はいくつか。' + pre('整数型: a ← 10\n整数型: b ← 3\nwhile (a ≧ b)\n  a ← a − b\nendwhile'),
+      choices: ['0', '1', '3', '4'], answer: 1,
+      explain: 'a は 10 → 7 → 4 → 1。1 ≧ 3 が成り立たなくなって終了。つまり 10 mod 3 を引き算で求めています。' },
+    { q: 'このページの関数 gcd で gcd(84, 36) を呼び出したときの戻り値はいくつか。',
+      choices: ['6', '12', '18', '36'], answer: 1,
+      explain: '84 mod 36 = 12 → (a, b) = (36, 12)。36 mod 12 = 0 → (a, b) = (12, 0)。b = 0 で終了し、a = 12 を返します。上のトレースで a=84, b=36 を入れて確かめられます。' },
+    { q: '配列 data = {2, 7, 4, 9, 1} のとき、data[3] + data[5] の値はいくつか（要素番号は 1 から始まる）。',
+      choices: ['5', '10', '13', '16'], answer: 0,
+      explain: 'data[1]=2, data[2]=7, data[3]=4, data[4]=9, data[5]=1。4 + 1 = 5。0から数えると 9 + (なし) となって迷う、よくある引っかけです。' },
+    { q: '次の関数で f(4) を呼び出したときの戻り値はいくつか。' + pre('○整数型: f(整数型: n)\n  if (n ≦ 0)\n    return 0\n  endif\n  return n + f(n − 1)'),
+      choices: ['0', '4', '10', '24'], answer: 2,
+      explain: 'f(4) = 4 + f(3) = 4 + 3 + f(2) = 4 + 3 + 2 + f(1) = 4 + 3 + 2 + 1 + f(0) = 10。階乗（掛け算）なら 24 になります。' },
+    { q: 'このページの2分探索 search で、data = {3, 8, 12, 17, 21, 25, 30}、target = 25 のとき、「mid ← (low + high) ÷ 2 の商」は何回実行されるか。',
+      choices: ['1回', '2回', '3回', '4回'], answer: 1,
+      explain: '1回目：low=1, high=7 → mid=4、data[4]=17 < 25 なので low=5。2回目：mid=(5+7)÷2=6、data[6]=25 で発見。よって2回です。' },
+  ]);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>公開鍵暗号・デジタル署名 | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .actors { display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 12px; align-items: stretch; }
+  @media (max-width: 640px) { .actors { grid-template-columns: 1fr 1fr; } .channel { grid-column: 1 / -1; grid-row: 2; } }
+  .actor { border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--surface-2); min-height: 190px; }
+  .actor h4 { margin: 0 0 8px; text-align: center; font-size: 15px; }
+  .items { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .key, .doc {
+    display: inline-flex; align-items: center; gap: 4px; border-radius: 8px; padding: 3px 10px; font-size: 14px;
+    border: 2px solid transparent; transition: transform .2s;
+  }
+  .key.a { background: var(--key-a-soft); color: var(--key-a); border-color: var(--key-a); }
+  .key.b { background: var(--key-b-soft); color: var(--key-b); border-color: var(--key-b); }
+  .key.secret { border-style: solid; font-weight: 700; }
+  .key.public { border-style: dashed; }
+  .key.used { transform: scale(1.12); box-shadow: 0 0 0 4px color-mix(in srgb, var(--on) 45%, transparent); }
+  .doc { background: var(--surface); border-color: var(--text); }
+  .doc.enc { font-family: "Consolas", monospace; background: var(--text); color: var(--surface); }
+  .doc.hash { border-style: dotted; }
+  .doc.sig { background: var(--key-a-soft); border-color: var(--key-a); }
+  .channel { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; text-align: center; }
+  .channel .msg { min-height: 34px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .channel .arrow { font-size: 22px; color: var(--muted); }
+  .eve { font-size: 13px; color: var(--ng); min-height: 20px; }
+  .step-text { background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 12px; min-height: 74px; }
+  .rule { font-size: 18px; text-align: center; padding: 12px; border-radius: 10px; background: var(--on-soft); margin-top: 10px; }
+
+  .net-wrap { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: center; }
+  @media (max-width: 640px) { .net-wrap { grid-template-columns: 1fr; } }
+  svg .node { fill: var(--accent); }
+  svg .edge { stroke: var(--on); stroke-width: 1.4; opacity: .75; }
+  .big-num { font: 700 26px "Consolas", monospace; }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cmp > div { background: var(--surface-2); border-radius: 10px; padding: 10px 14px; }
+  .cmp small { color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › セキュリティ</div>
+  <h1 class="page-title">公開鍵暗号・デジタル署名</h1>
+  <p class="page-lead">試験で最もよく問われるのは「<b>誰の・どちらの鍵を使うか</b>」。鍵の動きをアニメで追って、理屈で覚えましょう。科目Bのセキュリティ問題の土台にもなります。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#two">共通鍵と公開鍵</a><a href="#flow">鍵の動きを見る</a><a href="#count">鍵の数の計算</a><a href="#ca">認証局（PKI）</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="two">共通鍵暗号と公開鍵暗号</h2>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th></th><th>共通鍵暗号方式</th><th>公開鍵暗号方式</th></tr>
+      <tr><th>鍵</th><td>暗号化と復号に<b>同じ鍵</b>を使う</td><td><b>公開鍵</b>と<b>秘密鍵</b>のペア。片方で暗号化したら、もう片方でしか復号できない</td></tr>
+      <tr><th>速さ</th><td>速い</td><td>遅い（計算が重い）</td></tr>
+      <tr><th>弱点</th><td>鍵を相手に安全に渡すのが難しい（鍵配送問題）。相手ごとに鍵が必要</td><td>公開鍵が本当に本人のものか確かめる仕組みが必要（→認証局）</td></tr>
+      <tr><th>代表例</th><td>AES</td><td>RSA、楕円曲線暗号</td></tr>
+    </table>
+    <p class="note">実際の HTTPS（TLS）では、<b>公開鍵暗号で共通鍵を安全に受け渡し、本体のデータは速い共通鍵暗号で暗号化</b>します（ハイブリッド暗号方式）。</p>
+  </div>
+
+  <h2 id="flow">鍵の動きを見る</h2>
+  <p><span class="key a public">🔑 公開鍵</span>（点線）は誰に見せてもよい鍵、<span class="key a secret">🔑 秘密鍵</span>（実線）は持ち主だけが持つ鍵です。<span style="color:var(--key-a)">青</span>＝Aさんの鍵、<span style="color:var(--key-b)">オレンジ</span>＝Bさんの鍵。</p>
+  <div class="card">
+    <div class="seg" id="mode-tabs">
+      <button type="button" data-mode="enc" aria-pressed="true">① 暗号化（秘密を守る）</button>
+      <button type="button" data-mode="sig" aria-pressed="false">② デジタル署名（本人確認・改ざん検知）</button>
+    </div>
+    <div class="actors">
+      <div class="actor"><h4>Aさん（送信者）</h4><div class="items" id="a-items"></div></div>
+      <div class="channel">
+        <div class="arrow" id="ch-arrow">　</div>
+        <div class="msg" id="ch-msg"></div>
+        <div class="eve" id="eve"></div>
+      </div>
+      <div class="actor"><h4>Bさん（受信者）</h4><div class="items" id="b-items"></div></div>
+    </div>
+    <div class="step-text" id="step-text"></div>
+    <div class="btn-row">
+      <button class="btn" id="st-prev" type="button">◀ 戻る</button>
+      <button class="btn primary" id="st-next" type="button">次へ ▶</button>
+      <span class="note" id="st-prog"></span>
+    </div>
+    <div class="rule" id="rule"></div>
+  </div>
+
+  <div class="point"><b>理屈で覚えるコツ：</b><br>
+    ・<b>暗号化</b>の目的は「Bさんだけが読める」こと → Bさんしか持っていない <b>B の秘密鍵</b> で開けられるように、<b>B の公開鍵</b>で閉じる。<br>
+    ・<b>署名</b>の目的は「Aさんが作ったと証明する」こと → Aさんしか持っていない <b>A の秘密鍵</b>で署名し、誰でも <b>A の公開鍵</b>で確かめられる。</div>
+
+  <h2 id="count">鍵の数の計算（よく出る）</h2>
+  <p>n 人が、それぞれ全員と秘密に通信したいとき、必要な鍵はいくつ？　スライダーで人数を変えてみましょう。</p>
+  <div class="card">
+    <div class="btn-row"><label>人数 n = <b id="n-val">5</b>　<input type="range" id="n-range" min="2" max="100" value="5"></label></div>
+    <div class="net-wrap">
+      <svg class="diagram" id="net-svg" viewBox="0 0 260 260" role="img" aria-label="通信の組合せの図"></svg>
+      <div class="cmp">
+        <div><small>共通鍵暗号方式</small><div class="big-num" id="sym-num"></div><div class="mono" id="sym-f"></div><small>2人の組合せ（線）ごとに1つ必要</small></div>
+        <div><small>公開鍵暗号方式</small><div class="big-num" id="pub-num"></div><div class="mono" id="pub-f"></div><small>1人あたり公開鍵＋秘密鍵の2つ</small></div>
+      </div>
+    </div>
+    <p class="note" id="net-note"></p>
+  </div>
+
+  <h2 id="ca">認証局（CA）とPKI</h2>
+  <div class="card">
+    <p>「この公開鍵は本当に B さんのもの？」—— 悪い人が B さんになりすまして自分の公開鍵を配るかもしれません。そこで、信頼できる第三者の<b>認証局（CA）</b>が、<b>「この公開鍵は B さんのものです」というデジタル証明書</b>を発行します。</p>
+    <ul>
+      <li>デジタル証明書には、持ち主の情報・公開鍵・有効期限などが入っていて、<b>認証局の秘密鍵で署名</b>されている</li>
+      <li>受け取った人は、<b>認証局の公開鍵</b>で証明書の署名を検証する</li>
+      <li>秘密鍵の漏えいなどで無効になった証明書は <b>CRL（証明書失効リスト）</b>で公開される</li>
+    </ul>
+    <p class="note">このような公開鍵を安全に使うための仕組み全体を PKI（公開鍵基盤）と呼びます。</p>
+  </div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const KEY = {
+    Apub: '<span class="key a public" data-k="Apub">🔑 Aの公開鍵</span>',
+    Asec: '<span class="key a secret" data-k="Asec">🔑 Aの秘密鍵</span>',
+    Bpub: '<span class="key b public" data-k="Bpub">🔑 Bの公開鍵</span>',
+    Bsec: '<span class="key b secret" data-k="Bsec">🔑 Bの秘密鍵</span>',
+    plain: '<span class="doc">📄 平文「明日10時」</span>',
+    cipher: '<span class="doc enc">x9#Lq%2!</span>',
+    hash: '<span class="doc hash"># ハッシュ値 7f3a</span>',
+    hash2: '<span class="doc hash"># ハッシュ値 7f3a</span>',
+    sig: '<span class="doc sig">✒ 署名</span>',
+    ok: '<span class="doc" style="border-color:var(--ok);color:var(--ok)">✔ 一致！</span>',
+  };
+  const FLOWS = {
+    enc: {
+      rule: '暗号化は<b>受信者（B）の公開鍵</b>　→　復号は<b>受信者（B）の秘密鍵</b>',
+      steps: [
+        { a: ['plain'], b: ['Bpub', 'Bsec'], text: 'Bさんが<b>鍵ペア</b>（公開鍵と秘密鍵）を作ります。秘密鍵は Bさんだけが厳重に保管します。' },
+        { a: ['plain'], b: ['Bpub', 'Bsec'], msg: ['Bpub'], arrow: '←', text: 'Bさんは<b>公開鍵だけ</b>を Aさんに渡します（公開します）。公開鍵は誰に知られても問題ありません。' },
+        { a: ['plain', 'Bpub'], b: ['Bsec'], used: 'Bpub', text: 'Aさんは受け取った <b>Bの公開鍵</b> で平文を暗号化します。' },
+        { a: ['Bpub', 'cipher'], b: ['Bsec'], used: 'Bpub', text: '平文が暗号文になりました。Bの公開鍵で閉じたものは、<b>Bの秘密鍵でしか</b>開けられません。' },
+        { a: ['Bpub'], b: ['Bsec'], msg: ['cipher'], arrow: '→', eve: '盗聴者：「読めない…（Bの秘密鍵がない）」', text: '暗号文を送ります。途中で盗み見られても、Bの秘密鍵を持たない人には読めません。' },
+        { a: ['Bpub'], b: ['Bsec', 'cipher'], used: 'Bsec', text: 'Bさんは自分だけが持つ <b>Bの秘密鍵</b> で復号します。' },
+        { a: ['Bpub'], b: ['Bsec', 'plain'], text: '平文に戻りました。これで「Bさんだけが読める」通信ができました（<b>機密性</b>の確保）。' },
+      ],
+    },
+    sig: {
+      rule: '署名は<b>送信者（A）の秘密鍵</b>　→　検証は<b>送信者（A）の公開鍵</b>',
+      steps: [
+        { a: ['Apub', 'Asec', 'plain'], b: [], text: '今度は Aさんが<b>鍵ペア</b>を作ります。秘密鍵は Aさんだけが持ちます。' },
+        { a: ['Asec', 'plain'], b: ['Apub'], msg: ['Apub'], arrow: '→', text: 'Aさんは<b>公開鍵</b>を公開しておきます（Bさんも手に入れられます）。' },
+        { a: ['Asec', 'plain', 'hash'], b: ['Apub'], text: 'Aさんは平文から<b>ハッシュ値</b>（メッセージダイジェスト）を計算します。平文が1文字でも変わると、全く違う値になります。' },
+        { a: ['Asec', 'plain', 'sig'], b: ['Apub'], used: 'Asec', text: 'ハッシュ値を <b>Aの秘密鍵</b> で暗号化します。これが<b>デジタル署名</b>。Aの秘密鍵は Aさんしか持っていないので、Aさん以外には作れません。' },
+        { a: ['Asec'], b: ['Apub'], msg: ['plain', 'sig'], arrow: '→', text: '平文と署名をセットで送ります。<b>※署名は内容を隠すものではない</b>ので、平文はそのまま見えます。' },
+        { a: ['Asec'], b: ['Apub', 'plain', 'sig'], used: 'Apub', text: 'Bさんは <b>Aの公開鍵</b> で署名を復号し、ハッシュ値を取り出します。Aの公開鍵で開けられた ＝ Aの秘密鍵で作られた証拠です。' },
+        { a: ['Asec'], b: ['Apub', 'hash', 'hash2', 'ok'], text: 'Bさんも受け取った平文からハッシュ値を計算し、比べます。一致すれば<b>Aさん本人が送った（なりすましでない）</b>こと、<b>途中で改ざんされていない</b>ことが確認できます。' },
+      ],
+    },
+  };
+  let mode = 'enc', idx = 0;
+
+  function renderFlow() {
+    const f = FLOWS[mode], s = f.steps[idx];
+    const put = (el, list) => { el.innerHTML = list.map(k => KEY[k]).join(''); };
+    put($('a-items'), s.a);
+    put($('b-items'), s.b);
+    put($('ch-msg'), s.msg || []);
+    $('ch-arrow').textContent = s.arrow || '　';
+    $('eve').textContent = s.eve || '';
+    document.querySelectorAll('.actor [data-k]').forEach(k => k.classList.toggle('used', k.dataset.k === s.used));
+    $('step-text').innerHTML = s.text;
+    $('st-prog').textContent = `${idx + 1} / ${f.steps.length}`;
+    $('st-prev').disabled = idx === 0;
+    $('st-next').disabled = idx === f.steps.length - 1;
+    $('rule').innerHTML = f.rule;
+    document.querySelectorAll('#mode-tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+  }
+  $('st-next').addEventListener('click', () => { idx++; renderFlow(); });
+  $('st-prev').addEventListener('click', () => { idx--; renderFlow(); });
+  document.querySelectorAll('#mode-tabs button').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; idx = 0; renderFlow(); }));
+  renderFlow();
+
+  // ---- 鍵の数 ----
+  function renderNet() {
+    const n = +$('n-range').value;
+    $('n-val').textContent = n;
+    const shown = Math.min(n, 12);
+    const pts = [];
+    for (let i = 0; i < shown; i++) {
+      const t = -Math.PI / 2 + i * 2 * Math.PI / shown;
+      pts.push([130 + 105 * Math.cos(t), 130 + 105 * Math.sin(t)]);
+    }
+    let s = '';
+    for (let i = 0; i < shown; i++) for (let j = i + 1; j < shown; j++)
+      s += `<line class="edge" x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${pts[j][0]}" y2="${pts[j][1]}"/>`;
+    pts.forEach(p => { s += `<circle class="node" cx="${p[0]}" cy="${p[1]}" r="9"/>`; });
+    $('net-svg').innerHTML = s;
+    $('sym-num').textContent = (n * (n - 1) / 2).toLocaleString() + ' 個';
+    $('sym-f').textContent = `n(n−1)/2 = ${n}×${n - 1}/2`;
+    $('pub-num').textContent = (2 * n).toLocaleString() + ' 個';
+    $('pub-f').textContent = `2n = 2×${n}`;
+    $('net-note').textContent = n > 12 ? `※ 図は12人までを表示しています（実際は ${n} 人）。人数が増えるほど、共通鍵方式の鍵の数が急に増えるのが分かります。`
+      : '線1本 ＝ 共通鍵1つ。人数が増えると線（鍵）が一気に増えます。';
+  }
+  $('n-range').addEventListener('input', renderNet);
+  renderNet();
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'pubkey', [
+    { q: 'Aさんが公開鍵暗号方式を使って、Bさんだけが読めるようにメッセージを暗号化して送りたい。暗号化に使う鍵はどれか。',
+      choices: ['Aさんの公開鍵', 'Aさんの秘密鍵', 'Bさんの公開鍵', 'Bさんの秘密鍵'], answer: 2,
+      explain: 'Bさんだけが読めるように → Bさんだけが持つ「Bの秘密鍵」で復号できる形にする → 暗号化は「Bの公開鍵」。' },
+    { q: 'デジタル署名において、送信者が署名を生成するときに使う鍵はどれか。',
+      choices: ['送信者の公開鍵', '送信者の秘密鍵', '受信者の公開鍵', '受信者の秘密鍵'], answer: 1,
+      explain: '署名は「本人しか作れない」ことが大事なので、本人だけが持つ「送信者の秘密鍵」で作ります。検証は送信者の公開鍵です。' },
+    { q: 'デジタル署名を検証することで確認できることとして、適切なものはどれか。',
+      choices: ['メッセージの内容が第三者に読まれていないこと', 'メッセージが送信者本人のものであり、改ざんされていないこと', 'メッセージが受信者に確実に届いたこと', 'メッセージにウイルスが含まれていないこと'], answer: 1,
+      explain: 'デジタル署名で分かるのは「本人性（なりすましでない）」と「完全性（改ざんされていない）」。内容を秘密にする（機密性）ものではありません。' },
+    { q: '10人が互いに共通鍵暗号方式で個別に秘密の通信を行うとき、必要な鍵の総数はいくつか。',
+      choices: ['10', '20', '45', '90'], answer: 2,
+      explain: '2人の組合せごとに1つ必要なので n(n−1)/2 = 10×9/2 = 45 個。公開鍵暗号方式なら 2n = 20 個です。' },
+    { q: '認証局（CA）の役割として、適切なものはどれか。',
+      choices: ['利用者の秘密鍵を預かって管理する', '公開鍵とその持ち主を結び付けるデジタル証明書を発行する', '共通鍵を全員に配布する', '通信内容を暗号化して中継する'], answer: 1,
+      explain: '認証局は「この公開鍵は確かにこの人のもの」と証明するデジタル証明書を発行します。秘密鍵は本人が管理するもので、CAは預かりません。' },
+    { q: 'HTTPS（TLS）で一般的に使われるハイブリッド暗号方式の説明として、適切なものはどれか。',
+      choices: ['データ本体を公開鍵暗号で暗号化し、公開鍵を共通鍵暗号で送る', '共通鍵を公開鍵暗号で安全に共有し、データ本体は共通鍵暗号で暗号化する', 'データを公開鍵暗号と共通鍵暗号で二重に暗号化する', 'ハッシュ関数だけでデータを暗号化する'], answer: 1,
+      explain: '公開鍵暗号は安全に鍵を渡せるが遅い、共通鍵暗号は速いが鍵の受け渡しが難しい。両方の長所を組み合わせます。' },
+  ]);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>基数変換・2の補数 | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .bits { display: grid; grid-template-columns: repeat(8, minmax(34px, 1fr)); gap: 6px; max-width: 560px; }
+  .bit-cell {
+    border: 2px solid var(--off); border-radius: 10px; background: var(--surface); color: var(--muted);
+    font: 700 22px "Consolas", monospace; padding: 8px 0; cursor: pointer; text-align: center;
+  }
+  .bit-cell.is-on { border-color: var(--on); background: var(--on-soft); color: var(--text); }
+  .bit-cell.static { cursor: default; }
+  .bit-cell.flip { border-color: var(--accent); }
+  .weights { display: grid; grid-template-columns: repeat(8, minmax(34px, 1fr)); gap: 6px; max-width: 560px; font-size: 12px; color: var(--muted); text-align: center; }
+  .weights .sign { color: var(--ng); font-weight: 700; }
+  .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-width: 560px; margin-top: 6px; }
+  .groups div { text-align: center; border-top: 3px solid var(--accent); padding-top: 2px; font: 700 18px "Consolas", monospace; color: var(--accent); }
+  .groups.oct { grid-template-columns: 2fr 3fr 3fr; }
+  .groups.oct div { border-color: var(--ok); color: var(--ok); }
+  .readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 14px; }
+  .readout div { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; }
+  .readout small { display: block; color: var(--muted); font-size: 12px; }
+  .readout b { font: 700 20px "Consolas", monospace; }
+  .ladder { font: 17px "Consolas", monospace; line-height: 1.9; }
+  .ladder .r { color: var(--on); font-weight: 700; }
+  .ladder-wrap { display: flex; gap: 18px; align-items: stretch; flex-wrap: wrap; }
+  .arrow-up { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--on); font-size: 13px; }
+  .arrow-up .bar { width: 3px; flex: 1; background: var(--on); min-height: 40px; position: relative; }
+  .arrow-up .bar::before { content: ""; position: absolute; top: -8px; left: -6px; border: 7.5px solid transparent; border-bottom: 9px solid var(--on); border-top: 0; }
+  .comp-step { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: center; margin: 8px 0; }
+  .comp-step .bits { max-width: 420px; }
+  .comp-step .bit-cell { font-size: 18px; padding: 4px 0; }
+  @media (max-width: 560px) { .comp-step { grid-template-columns: 1fr; gap: 2px; } }
+  .frac-row { font: 16px "Consolas", monospace; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › 基礎理論</div>
+  <h1 class="page-title">基数変換・2の補数</h1>
+  <p class="page-lead">コンピュータは全てを 0 と 1（2進数）で扱います。10進数・16進数との変換と、マイナスの数の表し方（2の補数）を、ビットを押しながら覚えましょう。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#bits">ビットを押して変換</a><a href="#div">10進→2進（割り算）</a><a href="#comp">2の補数</a><a href="#frac">小数と誤差</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="bits">8ビットを押して変換してみよう</h2>
+  <p>各ビットをクリックすると 0/1 が切り替わります。数値を入力しても OK（-128〜255）。</p>
+  <div class="card">
+    <div class="btn-row">
+      <label>10進数で入力：<input type="number" id="dec-in" min="-128" max="255" value="13"></label>
+      <button class="btn" id="bits-clear" type="button">全部 0</button>
+      <label><input type="checkbox" id="signed-mode"> 先頭ビットを符号として見る（2の補数）</label>
+    </div>
+    <div class="weights" id="weights"></div>
+    <div class="bits" id="bit-grid"></div>
+    <div class="groups" id="hex-groups"></div>
+    <div class="groups oct" id="oct-groups"></div>
+    <div class="readout" id="readout"></div>
+    <p class="note" id="sum-line"></p>
+  </div>
+  <div class="point"><b>16進数は「4ビットずつ」</b>区切ると一瞬で変換できます（青い線）。8進数は「3ビットずつ」（緑の線）。<br>
+    10〜15 は A〜F。<span class="mono">1010=A, 1011=B, 1100=C, 1101=D, 1110=E, 1111=F</span></div>
+
+  <h2 id="div">10進数 → 2進数（2で割り続ける）</h2>
+  <div class="card">
+    <div class="btn-row"><label>10進数（0〜255）：<input type="number" id="div-in" min="0" max="255" value="45"></label></div>
+    <div class="ladder-wrap">
+      <div class="ladder" id="ladder"></div>
+      <div class="arrow-up"><div class="bar"></div><span>下から<br>読む</span></div>
+    </div>
+    <p id="div-result" style="font-size:18px"></p>
+  </div>
+
+  <h2 id="comp">2の補数（マイナスの数の表し方）</h2>
+  <p>「<b>全ビットを反転して、1を足す</b>」とマイナスの数になります。8ビットなら -128〜127 を表せます。</p>
+  <div class="card">
+    <div class="btn-row"><label>10進数（-128〜127）：<input type="number" id="comp-in" min="-128" max="127" value="-13"></label></div>
+    <div id="comp-steps"></div>
+    <p class="note">確かめ方：先頭ビットの重みを <b>-128</b> と考えて足すと元の数になります。</p>
+  </div>
+  <div class="point"><b>頻出ポイント：</b>nビットの2の補数で表せる範囲は <span class="mono">-2<sup>n-1</sup> 〜 2<sup>n-1</sup>-1</span>。8ビットなら <span class="mono">-128〜127</span>、マイナス側が1つ多いのが特徴です。</div>
+
+  <h2 id="frac">小数の2進数（2を掛け続ける）</h2>
+  <p>小数部分は「2倍して、整数部分（0か1）を取り出す」を繰り返します。0 になれば割り切れ、ならなければ<b>無限に続く（誤差が出る）</b>。</p>
+  <div class="card">
+    <div class="btn-row">
+      <label>小数（0〜1未満）：<input type="text" id="frac-in" value="0.625" inputmode="decimal"></label>
+      <button class="btn" type="button" data-frac="0.625">0.625</button>
+      <button class="btn" type="button" data-frac="0.75">0.75</button>
+      <button class="btn" type="button" data-frac="0.1">0.1</button>
+      <button class="btn" type="button" data-frac="0.3">0.3</button>
+    </div>
+    <div class="table-wrap"><table class="tt" id="frac-table"></table></div>
+    <p id="frac-result" style="font-size:17px"></p>
+  </div>
+  <div class="point"><b>覚えておく値：</b>2進数の小数の位は <span class="mono">0.5, 0.25, 0.125, 0.0625 …</span>。<br>
+    例：<span class="mono">0.101(2) = 0.5 + 0.125 = 0.625</span>。10進数の 0.1 は2進数では割り切れない（循環小数）ため、コンピュータでは誤差が出ます。</div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const to8 = n => (n & 255).toString(2).padStart(8, '0');
+
+  // ---- ビット操作パネル ----
+  let value = 13; // 0〜255 のビットパターン
+  const signed = $('signed-mode');
+
+  function renderBits() {
+    const bits = to8(value);
+    const sv = value >= 128 ? value - 256 : value;
+    $('weights').innerHTML = [128, 64, 32, 16, 8, 4, 2, 1]
+      .map((w, i) => i === 0 && signed.checked ? '<div class="sign">-128</div>' : `<div>${w}</div>`).join('');
+    const grid = $('bit-grid');
+    grid.innerHTML = '';
+    [...bits].forEach((b, i) => {
+      const c = document.createElement('button');
+      c.type = 'button';
+      c.className = 'bit-cell' + (b === '1' ? ' is-on' : '');
+      c.textContent = b;
+      c.setAttribute('aria-label', `第${7 - i}ビット`);
+      c.addEventListener('click', () => { value ^= 1 << (7 - i); syncInput(); renderBits(); });
+      grid.appendChild(c);
+    });
+    $('hex-groups').innerHTML = `<div>${parseInt(bits.slice(0, 4), 2).toString(16).toUpperCase()}</div><div>${parseInt(bits.slice(4), 2).toString(16).toUpperCase()}</div>`;
+    $('oct-groups').innerHTML = [bits.slice(0, 2), bits.slice(2, 5), bits.slice(5)].map(g => `<div>${parseInt(g, 2)}</div>`).join('');
+    $('readout').innerHTML = `
+      <div><small>2進数</small><b>${bits.slice(0, 4)} ${bits.slice(4)}</b></div>
+      <div><small>10進数（符号なし）</small><b>${value}</b></div>
+      <div><small>10進数（2の補数）</small><b>${sv}</b></div>
+      <div><small>16進数</small><b>${value.toString(16).toUpperCase().padStart(2, '0')}</b></div>
+      <div><small>8進数</small><b>${value.toString(8)}</b></div>`;
+    const terms = [...bits].map((b, i) => b === '1' ? (i === 0 && signed.checked ? -128 : 1 << (7 - i)) : null).filter(x => x !== null);
+    const total = signed.checked ? sv : value;
+    $('sum-line').textContent = terms.length ? `計算：${terms.join(' + ').replace(/\+ -/g, '- ')} = ${total}` : '計算：すべて 0 なので 0';
+  }
+  function syncInput() { $('dec-in').value = signed.checked && value >= 128 ? value - 256 : value; }
+  $('dec-in').addEventListener('input', e => {
+    const n = parseInt(e.target.value, 10);
+    if (isNaN(n) || n < -128 || n > 255) return;
+    if (n < 0 && !signed.checked) signed.checked = true;
+    value = n & 255;
+    renderBits();
+  });
+  $('bits-clear').addEventListener('click', () => { value = 0; syncInput(); renderBits(); });
+  signed.addEventListener('change', () => { syncInput(); renderBits(); });
+  renderBits();
+
+  // ---- 割り算のはしご ----
+  function renderLadder() {
+    let n = parseInt($('div-in').value, 10);
+    if (isNaN(n) || n < 0 || n > 255) return;
+    const lines = [], rems = [];
+    if (n === 0) { lines.push('2 ) 0'); rems.push(0); }
+    while (n > 0) {
+      lines.push(`2 ) ${String(n).padStart(3, ' ')}　… 余り <span class="r">${n % 2}</span>`);
+      rems.push(n % 2);
+      n = Math.floor(n / 2);
+    }
+    if (lines.length && parseInt($('div-in').value, 10) > 0) lines.push(`　 ${' '.repeat(2)}0`);
+    $('ladder').innerHTML = lines.join('<br>');
+    $('div-result').innerHTML = `答え：<b class="mono">${rems.slice().reverse().join('')}</b>（2進数）　← 余りを<b>下から上へ</b>並べる`;
+  }
+  $('div-in').addEventListener('input', renderLadder);
+  renderLadder();
+
+  // ---- 2の補数 ----
+  function cells(bits, cls = () => '') {
+    return '<div class="bits">' + [...bits].map((b, i) =>
+      `<div class="bit-cell static${b === '1' ? ' is-on' : ''}${cls(i)}">${b}</div>`).join('') + '</div>';
+  }
+  function renderComp() {
+    const n = parseInt($('comp-in').value, 10);
+    if (isNaN(n) || n < -128 || n > 127) return;
+    const box = $('comp-steps');
+    if (n >= 0) {
+      box.innerHTML = `<div class="comp-step"><div>${n} はプラスなので<br>そのまま</div>${cells(to8(n))}</div>
+        <p>プラスの数は普通の2進数と同じ（先頭ビットは 0）。マイナスにしたいときは、例えば <b>-${n || 1}</b> を入力してみてください。</p>`;
+      return;
+    }
+    const abs = -n;
+    if (abs === 128) {
+      box.innerHTML = `<div class="comp-step"><div>-128</div>${cells(to8(128))}</div>
+        <p>-128 は特別で、<span class="mono">10000000</span> になります（+128 は8ビットの2の補数では表せません）。</p>`;
+      return;
+    }
+    const a = to8(abs), inv = to8(~abs), res = to8(n);
+    box.innerHTML = `
+      <div class="comp-step"><div>① ${abs} を2進数に</div>${cells(a)}</div>
+      <div class="comp-step"><div>② 全ビット反転<br><span class="note">（1の補数）</span></div>${cells(inv, () => ' flip')}</div>
+      <div class="comp-step"><div>③ 1 を足す</div>${cells(res)}</div>
+      <p>答え：<b class="mono">${res}</b> = ${n}<br>
+      <span class="note">確認：-128 + ${[...res].slice(1).map((b, i) => b === '1' ? 64 >> i : 0).filter(Boolean).join(' + ') || 0} = ${n}</span></p>`;
+  }
+  $('comp-in').addEventListener('input', renderComp);
+  renderComp();
+
+  // ---- 小数 ----
+  function renderFrac() {
+    const raw = $('frac-in').value.trim();
+    const m = raw.match(/^0?\.(\d{1,6})$/);
+    if (!m) { $('frac-result').textContent = '0.625 のように、0以上1未満の小数（小数点以下6桁まで）を入力してください。'; $('frac-table').innerHTML = ''; return; }
+    const den = 10 ** m[1].length;
+    let num = parseInt(m[1], 10);
+    const seen = new Map(), digits = [];
+    let rows = '<tr><th>計算</th><th>整数部分</th></tr>', loopAt = -1;
+    for (let i = 0; i < 12 && num !== 0; i++) {
+      if (seen.has(num)) { loopAt = seen.get(num); break; }
+      seen.set(num, i);
+      const before = num / den;
+      num *= 2;
+      const bit = num >= den ? 1 : 0;
+      if (bit) num -= den;
+      digits.push(bit);
+      rows += `<tr><td class="frac-row" style="text-align:left">${fmt(before)} × 2 = ${fmt(before * 2)}</td><td><b>${bit}</b></td></tr>`;
+    }
+    $('frac-table').innerHTML = rows;
+    const bin = '0.' + digits.join('');
+    if (num === 0) {
+      $('frac-result').innerHTML = `答え：<b class="mono">${bin}</b>（2進数）　割り切れました！`;
+    } else if (loopAt >= 0) {
+      $('frac-result').innerHTML = `答え：<b class="mono">0.${digits.slice(0, loopAt).join('')}<span style="text-decoration:overline">${digits.slice(loopAt).join('')}</span>…</b>　<b style="color:var(--ng)">同じ計算が繰り返す循環小数</b>（上線部分がずっと続く）。コンピュータでは途中で切るので誤差が出ます。`;
+    } else {
+      $('frac-result').innerHTML = `<b class="mono">${bin}…</b>　12桁を超えても割り切れません。`;
+    }
+  }
+  function fmt(x) { return String(Math.round(x * 1e6) / 1e6); }
+  $('frac-in').addEventListener('input', renderFrac);
+  document.querySelectorAll('[data-frac]').forEach(b => b.addEventListener('click', () => { $('frac-in').value = b.dataset.frac; renderFrac(); }));
+  renderFrac();
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'radix', [
+    { q: '10進数 45 を2進数で表したものはどれか。',
+      choices: ['101011', '101101', '110101', '100111'], answer: 1,
+      explain: '45 = 32 + 8 + 4 + 1。重み 32, 16, 8, 4, 2, 1 の位置に 1, 0, 1, 1, 0, 1 を並べて 101101 です。' },
+    { q: '8ビットの2の補数で表された 1111 1010 を10進数にするといくつか。',
+      choices: ['-5', '-6', '-250', '250'], answer: 1,
+      explain: '先頭が1なのでマイナス。反転すると 0000 0101 (=5)、1を足して 6。よって -6。または -128+64+32+16+8+2 = -6。' },
+    { q: '16進数 2A を10進数で表したものはどれか。',
+      choices: ['26', '32', '42', '210'], answer: 2,
+      explain: '2 × 16 + A(=10) = 42。2進数にすると 0010 1010 です。' },
+    { q: '8ビットの2の補数で表現できる整数の範囲はどれか。',
+      choices: ['0 〜 255', '-127 〜 127', '-128 〜 127', '-127 〜 128'], answer: 2,
+      explain: 'nビットで -2<sup>n-1</sup> 〜 2<sup>n-1</sup>-1。8ビットなら -128 〜 127。マイナス側が1つ多くなります。' },
+    { q: '2進数の小数 0.101 を10進数で表したものはどれか。',
+      choices: ['0.5', '0.625', '0.75', '0.101'], answer: 1,
+      explain: '小数第1位が 0.5、第2位が 0.25、第3位が 0.125。0.5 + 0.125 = 0.625。' },
+    { q: '10進数の 0.1 を2進数で表すとどうなるか。',
+      choices: ['0.1 になる', '0.01 になる', '有限の桁で正確に表せる', '循環小数になり、有限のビット数では正確に表せない'], answer: 3,
+      explain: '0.1 × 2 を繰り返すと 0.0001100110011… と「0011」が循環します。上の「0.1」ボタンで確かめてみましょう。' },
+  ]);
+})();
+</script>
+</body>
+</html>

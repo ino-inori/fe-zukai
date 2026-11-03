@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IPアドレスとサブネット | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .bitrow { display: grid; grid-template-columns: 130px 1fr 150px; gap: 10px; align-items: center; margin: 6px 0; }
+  .bitrow .lab { font-size: 14px; font-weight: 600; }
+  .bitrow .dec { font: 700 16px "Consolas", monospace; text-align: right; }
+  .octets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .octet { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+  .b {
+    font: 700 14px "Consolas", monospace; text-align: center; border-radius: 4px; padding: 3px 0;
+    background: var(--surface-2); color: var(--muted);
+  }
+  .b.n { background: var(--accent-soft); color: var(--accent); }
+  .b.h { background: var(--on-soft); color: var(--on); }
+  .b.one { color: var(--text); }
+  .bitrow.sep { border-top: 2px solid var(--text); padding-top: 6px; }
+  @media (max-width: 760px) {
+    .bitrow { grid-template-columns: 1fr; gap: 2px; }
+    .bitrow .dec { text-align: left; }
+    .b { font-size: 11px; }
+    .octets { gap: 5px; }
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; margin: 6px 0 4px; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend .ln::before { background: var(--accent-soft); border: 1px solid var(--accent); }
+  .legend .lh::before { background: var(--on-soft); border: 1px solid var(--on); }
+  .calc-in { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .calc-in input[type="text"] { width: 190px; font-family: "Consolas", monospace; }
+  .prefix-num { font: 700 22px "Consolas", monospace; color: var(--accent); min-width: 44px; display: inline-block; }
+  .err { color: var(--ng); font-size: 14px; }
+  .res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 14px; }
+  .res-grid div { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; }
+  .res-grid small { display: block; color: var(--muted); font-size: 12px; }
+  .res-grid b { font: 700 18px "Consolas", monospace; }
+  .res-grid .hl { background: var(--on-soft); }
+  .verdict { font-size: 18px; font-weight: 700; padding: 10px 14px; border-radius: 10px; margin-top: 10px; }
+  .verdict.same { background: var(--ok-soft); color: var(--ok); }
+  .verdict.diff { background: var(--ng-soft); color: var(--ng); }
+  .split-bar { display: flex; height: 46px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); margin: 10px 0; }
+  .split-bar div { flex: 1; display: flex; align-items: center; justify-content: center; font: 12px "Consolas", monospace; border-right: 1px solid var(--surface); color: var(--text); min-width: 0; overflow: hidden; }
+  .split-bar div:nth-child(odd) { background: var(--accent-soft); }
+  .split-bar div:nth-child(even) { background: var(--l4); }
+  table.tt tr.sel td { background: var(--accent-soft); font-weight: 700; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › ネットワーク</div>
+  <h1 class="page-title">IPアドレスとサブネット</h1>
+  <p class="page-lead">IPアドレスは「どのネットワークの（ネットワーク部）、どの機器か（ホスト部）」を表す32ビットの番号。境目を決めるのが<b>サブネットマスク</b>です。ビットを見ながら計算の仕組みをつかみましょう。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#basic">IPアドレスの形</a><a href="#calc">サブネット計算機</a><a href="#table">早見表</a><a href="#same">同じネットワーク？</a><a href="#split">サブネット分割</a><a href="#special">特別なアドレス</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="basic">IPアドレスの形</h2>
+  <div class="card">
+    <p><b>IPv4 アドレス</b>は 32ビット。8ビットずつ4つ（オクテット）に区切り、それぞれを10進数（0〜255）で書きます。</p>
+    <p class="mono" style="font-size:17px">192.168.10.77 ＝ 11000000.10101000.00001010.01001101</p>
+    <p>サブネットマスクは、<b>ネットワーク部を 1、ホスト部を 0</b> にした32ビット。1 は必ず左側に連続して並びます。<br>
+      1 の個数をスラッシュの後ろに書く表し方が <b>CIDR表記</b>（プレフィックス長）です。</p>
+    <p class="mono" style="font-size:17px">255.255.255.192 ＝ 11111111.11111111.11111111.11000000 ＝ /26</p>
+  </div>
+
+  <h2 id="calc">サブネット計算機</h2>
+  <p>IPアドレスを入力し、スライダーでプレフィックス長を変えてみましょう。境目が動くと、ネットワークアドレスやホスト数が変わります。</p>
+  <div class="card">
+    <div class="calc-in">
+      <label>IPアドレス：<input type="text" id="c-ip" value="192.168.10.77" inputmode="decimal"></label>
+      <label>/<span class="prefix-num" id="c-pnum">26</span><input type="range" id="c-prefix" min="8" max="30" value="26"></label>
+      <span class="err" id="c-err"></span>
+    </div>
+    <div class="legend"><span class="ln">ネットワーク部</span><span class="lh">ホスト部</span></div>
+    <div id="c-rows"></div>
+    <div class="res-grid" id="c-res"></div>
+  </div>
+  <div class="point"><b>ここだけは必ず覚える：</b><br>
+    ・<b>ネットワークアドレス</b> ＝ IPアドレス AND サブネットマスク（ホスト部を全部 0 にしたもの）<br>
+    ・<b>ブロードキャストアドレス</b> ＝ ホスト部を全部 1 にしたもの<br>
+    ・<b>割り当てられるホスト数 ＝ 2<sup>ホスト部のビット数</sup> − 2</b>（−2 はネットワークアドレスとブロードキャストアドレスの分）</div>
+
+  <h2 id="table">早見表（クリックで計算機に反映）</h2>
+  <div class="card table-wrap">
+    <table class="tt" id="mask-table"></table>
+    <p class="note">第4オクテットのマスクの値は 128, 192, 224, 240, 248, 252 と「左から1を足していく」並び。ホスト数は 2 のべき乗 − 2。</p>
+  </div>
+
+  <h2 id="same">2つの機器は同じネットワーク？</h2>
+  <p>両方のIPアドレスとサブネットマスクの AND をとり、<b>ネットワークアドレスが一致すれば同じネットワーク</b>です。同じネットワーク内ならルータなしで直接通信できます。</p>
+  <div class="card">
+    <div class="calc-in">
+      <label>機器A：<input type="text" id="s-a" value="192.168.1.10"></label>
+      <label>機器B：<input type="text" id="s-b" value="192.168.1.40"></label>
+      <label>/<span class="prefix-num" id="s-pnum">27</span><input type="range" id="s-prefix" min="8" max="30" value="27"></label>
+      <span class="err" id="s-err"></span>
+    </div>
+    <div id="s-rows"></div>
+    <div id="s-verdict"></div>
+  </div>
+
+  <h2 id="split">サブネット分割</h2>
+  <p>1つのネットワークを、ホスト部のビットを借りて小さなネットワーク（サブネット）に分けます。<b>k ビット借りると 2<sup>k</sup> 個</b>に分けられます。</p>
+  <div class="card">
+    <div class="calc-in">
+      <span class="mono">192.168.1.0/24 を</span>
+      <div class="seg" id="split-seg" style="margin:0"></div>
+      <span>個に分ける</span>
+    </div>
+    <div class="split-bar" id="split-bar"></div>
+    <p id="split-sum"></p>
+    <div class="table-wrap"><table class="tt" id="split-table"></table></div>
+  </div>
+
+  <h2 id="special">特別なアドレス・関連知識</h2>
+  <div class="card table-wrap">
+    <h3 style="margin-top:0">プライベートIPアドレス（社内・家庭内で自由に使える）</h3>
+    <table class="info">
+      <tr><th>範囲</th><th>CIDR</th><th>昔のクラス</th></tr>
+      <tr><td class="mono">10.0.0.0 〜 10.255.255.255</td><td class="mono">10.0.0.0/8</td><td>クラスA</td></tr>
+      <tr><td class="mono">172.16.0.0 〜 172.31.255.255</td><td class="mono">172.16.0.0/12</td><td>クラスB</td></tr>
+      <tr><td class="mono">192.168.0.0 〜 192.168.255.255</td><td class="mono">192.168.0.0/16</td><td>クラスC</td></tr>
+    </table>
+    <p class="note">インターネット上で重複しないよう管理されているのは<b>グローバルIPアドレス</b>。プライベートIPアドレスのままではインターネットと通信できません。<br>
+      ⚠ 172.<b>32</b>.0.1 や 192.<b>169</b>.1.1 はプライベートではない、という引っかけが頻出です。</p>
+
+    <h3>NAT と NAPT</h3>
+    <ul>
+      <li><b>NAT</b>：プライベートIPアドレスとグローバルIPアドレスを 1対1 で変換する</li>
+      <li><b>NAPT（IPマスカレード）</b>：IPアドレスに加えて<b>ポート番号も変換</b>し、1つのグローバルIPアドレスを複数の端末で共有する（家庭用ルータはこれ）</li>
+    </ul>
+
+    <h3>その他</h3>
+    <table class="info">
+      <tr><th>127.0.0.1</th><td>ループバックアドレス。自分自身を指す（localhost）</td></tr>
+      <tr><th>DHCP</th><td>機器にIPアドレスなどを自動で割り当てる仕組み</td></tr>
+      <tr><th>DNS</th><td>ドメイン名（www.example.com）と IPアドレスを対応付ける（名前解決）</td></tr>
+      <tr><th>ARP</th><td>IPアドレスから MACアドレスを調べる</td></tr>
+      <tr><th>IPv6</th><td>128ビット。16ビットずつ8つに区切り16進数で書く（例 2001:db8::1）。アドレス枯渇対策</td></tr>
+    </table>
+  </div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  // ---- 32ビット整数ユーティリティ ----
+  function parseIP(s) {
+    const m = String(s).trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return null;
+    const o = m.slice(1).map(Number);
+    if (o.some(x => x > 255)) return null;
+    return ((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0;
+  }
+  const toIP = n => [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.');
+  const maskOf = p => (p === 0 ? 0 : (0xFFFFFFFF << (32 - p)) >>> 0);
+  const bits = n => n.toString(2).padStart(32, '0');
+
+  function bitRow(label, n, prefix, opts = {}) {
+    const b = bits(n);
+    const octs = [0, 1, 2, 3].map(o =>
+      '<div class="octet">' + [...b.slice(o * 8, o * 8 + 8)].map((x, i) => {
+        const pos = o * 8 + i;
+        const cls = opts.plain ? '' : pos < prefix ? ' n' : ' h';
+        return `<div class="b${cls}${x === '1' ? ' one' : ''}">${x}</div>`;
+      }).join('') + '</div>').join('');
+    return `<div class="bitrow${opts.sep ? ' sep' : ''}"><div class="lab">${label}</div><div class="octets">${octs}</div><div class="dec">${toIP(n)}${opts.suffix || ''}</div></div>`;
+  }
+
+  // ---- 計算機 ----
+  function renderCalc() {
+    const p = +$('c-prefix').value;
+    $('c-pnum').textContent = p;
+    let raw = $('c-ip').value.trim();
+    const slash = raw.match(/^(.*)\/(\d{1,2})$/);
+    if (slash && +slash[2] >= 8 && +slash[2] <= 30) { raw = slash[1]; $('c-prefix').value = slash[2]; return renderCalc0(raw, +slash[2]); }
+    renderCalc0(raw, p);
+  }
+  function renderCalc0(raw, p) {
+    $('c-pnum').textContent = p;
+    const ip = parseIP(raw);
+    if (ip === null) { $('c-err').textContent = '192.168.10.77 の形で入力してください（各数字は0〜255）'; return; }
+    $('c-err').textContent = '';
+    const mask = maskOf(p), net = (ip & mask) >>> 0, bc = (net | ~mask) >>> 0;
+    const hostBits = 32 - p, hosts = 2 ** hostBits - 2;
+    $('c-rows').innerHTML =
+      bitRow('IPアドレス', ip, p) +
+      bitRow('サブネットマスク', mask, p) +
+      bitRow('AND → ネットワークアドレス', net, p, { sep: true }) +
+      bitRow('ブロードキャストアドレス', bc, p, { suffix: '' });
+    $('c-res').innerHTML = `
+      <div><small>CIDR表記</small><b>${toIP(net)}/${p}</b></div>
+      <div><small>サブネットマスク</small><b>${toIP(mask)}</b></div>
+      <div><small>ネットワーク部 / ホスト部</small><b>${p} / ${hostBits} ビット</b></div>
+      <div><small>ネットワークアドレス</small><b>${toIP(net)}</b></div>
+      <div><small>ブロードキャストアドレス</small><b>${toIP(bc)}</b></div>
+      <div><small>割り当てられる範囲</small><b style="font-size:15px">${toIP(net + 1)} 〜 ${toIP(bc - 1)}</b></div>
+      <div class="hl"><small>割り当てられるホスト数</small><b>2<sup>${hostBits}</sup> − 2 = ${hosts.toLocaleString()}</b></div>`;
+    document.querySelectorAll('#mask-table tr[data-p]').forEach(tr => tr.classList.toggle('sel', +tr.dataset.p === p));
+  }
+  $('c-ip').addEventListener('input', renderCalc);
+  $('c-prefix').addEventListener('input', () => {
+    $('c-ip').value = $('c-ip').value.replace(/\/\d{1,2}$/, '');
+    renderCalc();
+  });
+
+  // ---- 早見表 ----
+  let t = '<tr><th>CIDR</th><th>サブネットマスク</th><th>ホスト部</th><th>ホスト数</th></tr>';
+  for (let p = 16; p <= 30; p++) {
+    t += `<tr class="clickable" data-p="${p}"><td class="mono">/${p}</td><td class="mono">${toIP(maskOf(p))}</td><td>${32 - p} ビット</td><td>${(2 ** (32 - p) - 2).toLocaleString()}</td></tr>`;
+  }
+  $('mask-table').innerHTML = t;
+  $('mask-table').querySelectorAll('tr[data-p]').forEach(tr => tr.addEventListener('click', () => {
+    $('c-prefix').value = tr.dataset.p;
+    $('c-ip').value = $('c-ip').value.replace(/\/\d{1,2}$/, '');
+    renderCalc();
+    $('calc').scrollIntoView({ behavior: 'smooth' });
+  }));
+  renderCalc();
+
+  // ---- 同じネットワーク判定 ----
+  function renderSame() {
+    const p = +$('s-prefix').value;
+    $('s-pnum').textContent = p;
+    const a = parseIP($('s-a').value), b = parseIP($('s-b').value);
+    if (a === null || b === null) { $('s-err').textContent = 'IPアドレスの形式が正しくありません'; return; }
+    $('s-err').textContent = '';
+    const mask = maskOf(p), na = (a & mask) >>> 0, nb = (b & mask) >>> 0;
+    $('s-rows').innerHTML =
+      '<h3>機器A</h3>' + bitRow('IPアドレス', a, p) + bitRow('AND マスク', mask, p) + bitRow('ネットワーク', na, p, { sep: true }) +
+      '<h3>機器B</h3>' + bitRow('IPアドレス', b, p) + bitRow('AND マスク', mask, p) + bitRow('ネットワーク', nb, p, { sep: true });
+    const same = na === nb;
+    $('s-verdict').innerHTML = `<div class="verdict ${same ? 'same' : 'diff'}">${same
+      ? `✔ 同じネットワーク（どちらも ${toIP(na)}/${p}）`
+      : `✘ 違うネットワーク（A は ${toIP(na)}/${p}、B は ${toIP(nb)}/${p}）→ 通信にはルータが必要`}</div>`;
+  }
+  ['s-a', 's-b', 's-prefix'].forEach(id => $(id).addEventListener('input', renderSame));
+  renderSame();
+
+  // ---- サブネット分割 ----
+  let splitK = 2;
+  [1, 2, 3, 4].forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 2 ** k;
+    b.addEventListener('click', () => { splitK = k; renderSplit(); });
+    $('split-seg').appendChild(b);
+  });
+  function renderSplit() {
+    const base = parseIP('192.168.1.0'), k = splitK, n = 2 ** k, p = 24 + k, size = 256 / n;
+    [...$('split-seg').children].forEach((b, i) => b.setAttribute('aria-pressed', i + 1 === k));
+    let bar = '', rows = '<tr><th>#</th><th>ネットワークアドレス</th><th>割り当て範囲</th><th>ブロードキャスト</th></tr>';
+    for (let i = 0; i < n; i++) {
+      const net = base + i * size;
+      bar += `<div title="${toIP(net)}/${p}">.${i * size}</div>`;
+      rows += `<tr><td>${i + 1}</td><td class="mono">${toIP(net)}/${p}</td><td class="mono">${toIP(net + 1)} 〜 ${toIP(net + size - 2)}</td><td class="mono">${toIP(net + size - 1)}</td></tr>`;
+    }
+    $('split-bar').innerHTML = bar;
+    $('split-table').innerHTML = rows;
+    $('split-sum').innerHTML = `ホスト部から <b>${k}ビット</b>借りる → <b>${n}個</b>のサブネット。プレフィックスは <b>/${p}</b>（マスク <span class="mono">${toIP(maskOf(p))}</span>）。<br>
+      各サブネットのアドレス数は 2<sup>${8 - k}</sup> = ${size}、割り当てられるホスト数は <b>${size} − 2 = ${size - 2}</b>。`;
+  }
+  renderSplit();
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'ip', [
+    { q: 'サブネットマスクが 255.255.255.240 のネットワークで、ホストに割り当てられる IPアドレスの数はいくつか。',
+      choices: ['14', '16', '30', '240'], answer: 0,
+      explain: '240 = 11110000 なのでホスト部は 4ビット。2<sup>4</sup> − 2 = 14。−2 はネットワークアドレスとブロードキャストアドレスの分です。' },
+    { q: 'IPアドレス 192.168.1.100/26 が属するネットワークのネットワークアドレスはどれか。',
+      choices: ['192.168.1.0', '192.168.1.64', '192.168.1.96', '192.168.1.128'], answer: 1,
+      explain: '/26 は第4オクテットの上位2ビットがネットワーク部。100 = 01100100 → ホスト部を0にすると 01000000 = 64。区切りは 0, 64, 128, 192 です。' },
+    { q: 'プライベートIPアドレスはどれか。',
+      choices: ['8.8.8.8', '10.1.2.3', '172.32.0.1', '192.169.1.1'], answer: 1,
+      explain: 'プライベートは 10.0.0.0/8、172.16.0.0〜172.31.255.255、192.168.0.0/16。172.32 と 192.169 は範囲外の引っかけです。' },
+    { q: '192.168.10.0/24 のネットワークを、同じ大きさの4つのサブネットに分割する。サブネットマスクはどれか。',
+      choices: ['255.255.255.128', '255.255.255.192', '255.255.255.224', '255.255.255.240'], answer: 1,
+      explain: '4 = 2<sup>2</sup> なのでホスト部から2ビット借りて /26。第4オクテットは 11000000 = 192。各サブネットのホスト数は 62 です。' },
+    { q: 'IPアドレス 192.168.1.10/27 の機器と同じネットワークに属するのはどれか。',
+      choices: ['192.168.1.30', '192.168.1.33', '192.168.1.40', '192.168.1.65'], answer: 0,
+      explain: '/27 はアドレス32個ずつの区切り（0〜31, 32〜63, 64〜95 …）。192.168.1.10 は 0〜31 のネットワークなので、同じなのは .30 だけです。' },
+    { q: 'IPアドレス 192.168.5.130/25 のブロードキャストアドレスはどれか。',
+      choices: ['192.168.5.127', '192.168.5.128', '192.168.5.254', '192.168.5.255'], answer: 3,
+      explain: '/25 は 0〜127 と 128〜255 の2つに分かれる。130 は 128〜255 側なので、ホスト部を全部1にした 192.168.5.255 がブロードキャストアドレスです。' },
+    { q: 'NAPT（IPマスカレード）の説明として適切なものはどれか。',
+      choices: ['ドメイン名をIPアドレスに変換する', 'IPアドレスからMACアドレスを調べる', 'IPアドレスとポート番号を変換し、1つのグローバルIPアドレスを複数の端末で共有する', '端末にIPアドレスを自動で割り当てる'], answer: 2,
+      explain: 'NAPT はポート番号も使って変換するので、1つのグローバルIPアドレスを複数台で共有できます。他の選択肢はそれぞれ DNS、ARP、DHCP の説明です。' },
+  ]);
+})();
+</script>
+</body>
+</html>

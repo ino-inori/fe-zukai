@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>触って理解する基本情報</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/common.js"></script>
+<script src="js/topics.js"></script>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <section class="hero">
+    <h1>図を動かして覚える<br>基本情報技術者試験</h1>
+    <p>頻出テーマを、クリックや入力で動く図解で解説します。各ページの最後には確認問題（オリジナル）付き。</p>
+    <div class="exam-facts">
+      <div><b>科目A</b>60問・90分。用語や計算の知識問題</div>
+      <div><b>科目B</b>20問・100分。アルゴリズム（擬似言語）とセキュリティ</div>
+      <div><b>合格基準</b>科目A・科目Bともに 1000点満点中 600点以上</div>
+    </div>
+  </section>
+
+  <h2>分野別トピック</h2>
+  <div class="filter-row">
+    <span class="freq">★★★</span>最頻出　<span class="freq">★★</span>よく出る　<span class="freq">★</span>ときどき
+    <span style="flex:1"></span>
+    <label><input type="checkbox" id="only-ready"> 公開済みだけ表示</label>
+  </div>
+  <div id="topic-list"></div>
+</main>
+
+<footer class="site-footer">自分用の学習サイト。内容は学習の補助です。最新の出題範囲は IPA のシラバスを確認してください。</footer>
+
+<script>
+(function () {
+  const root = document.getElementById('topic-list');
+  const onlyReady = document.getElementById('only-ready');
+
+  function render() {
+    root.innerHTML = '';
+    FE_TOPICS.forEach(group => {
+      const items = group.items.filter(t => !onlyReady.checked || t.href);
+      if (!items.length) return;
+      const h = document.createElement('h3');
+      h.textContent = group.cat;
+      root.appendChild(h);
+      const grid = document.createElement('div');
+      grid.className = 'cat-grid';
+      items.forEach(t => {
+        const el = document.createElement(t.href ? 'a' : 'div');
+        el.className = 'topic-card' + (t.href ? '' : ' soon');
+        if (t.href) el.href = t.href;
+        const result = FE.store.get('quiz:' + t.id);
+        let badge = '<span class="badge">準備中</span>';
+        if (t.href) badge = result
+          ? `<span class="badge done">確認問題 ${result.correct}/${result.total}</span>`
+          : '<span class="badge ready">図解あり</span>';
+        el.innerHTML = `<div class="t">${t.title}</div><div class="d">${t.desc}</div>
+          <div class="meta"><span class="freq">${'★'.repeat(t.freq)}</span>${badge}</div>`;
+        grid.appendChild(el);
+      });
+      root.appendChild(grid);
+    });
+  }
+  onlyReady.addEventListener('change', render);
+  render();
+})();
+</script>
+</body>
+</html>
