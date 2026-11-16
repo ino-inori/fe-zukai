@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>キャッシュと実効アクセス時間 | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .hier { display: grid; gap: 6px; justify-items: center; margin: 6px 0; }
+  .hier .lv { border-radius: 10px; padding: 6px 8px; text-align: center; line-height: 1.4; border: 1px solid var(--border); }
+  .hier .lv b { display: block; font-size: 15px; }
+  .hier .lv span { font-size: 12px; color: var(--muted); }
+  .hier-axis { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  svg .box rect { fill: var(--surface); stroke: var(--off); stroke-width: 2.5; }
+  svg .box.act rect { stroke: var(--accent); fill: var(--accent-soft); }
+  svg .box.miss rect { stroke: var(--ng); fill: var(--ng-soft); }
+  svg .box .name { fill: var(--text); font-size: 14px; font-weight: 700; }
+  svg .box .sub { fill: var(--muted); font-size: 11px; }
+  svg .path { stroke: var(--off); stroke-width: 3; fill: none; }
+  svg .path.act { stroke: var(--accent); stroke-width: 4; }
+  svg .cap { fill: var(--muted); font-size: 12px; }
+  .bar { display: flex; height: 40px; border-radius: 8px; overflow: hidden; margin: 4px 0 2px; }
+  .bar div { display: flex; align-items: center; justify-content: center; font-size: 12px; white-space: nowrap; overflow: hidden; min-width: 0; }
+  .bar .hit { background: var(--ok-soft); color: var(--ok); border-right: 1px solid var(--surface); }
+  .bar .miss { background: var(--ng-soft); color: var(--ng); font-weight: 700; }
+  .bar-cap { font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .formula { font: 15px/1.9 "Consolas", monospace; background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 10px; overflow-x: auto; }
+  .formula b { color: var(--accent); }
+  .big { font: 700 28px "Consolas", monospace; color: var(--accent); }
+  .row-in { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .row-in input[type="number"] { width: 90px; }
+  .slider { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .slider .v { font: 700 16px "Consolas", monospace; min-width: 96px; }
+  .total { margin-top: 10px; font-size: 17px; }
+  .err { color: var(--ng); font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › コンピュータ構成・システム</div>
+  <h1 class="page-title">キャッシュと実効アクセス時間</h1>
+  <p class="page-lead">キャッシュメモリは、速い CPU と遅い主記憶の間に置く「小さくて速いメモリ」。<b>ヒット率を使った実効アクセス時間の計算</b>は、式が1つだけなので確実に得点したい定番問題です。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#hier">記憶階層</a><a href="#flow">キャッシュの働き</a><a href="#calc">実効アクセス時間</a><a href="#inverse">ヒット率を逆算</a><a href="#tips">頻出パターン</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="hier">記憶階層</h2>
+  <p>記憶装置は「速いものほど高価で、たくさんは積めない」という関係にあります。そこで、速くて小さい装置と遅くて大きい装置を<b>段々に組み合わせて</b>使います。</p>
+  <div class="card">
+    <div class="hier">
+      <div class="lv" style="width:46%;background:var(--l7)"><b>レジスタ</b><span>CPU の内部</span></div>
+      <div class="lv" style="width:64%;background:var(--l5)"><b>キャッシュメモリ</b><span>数ナノ秒</span></div>
+      <div class="lv" style="width:82%;background:var(--l4)"><b>主記憶（メインメモリ）</b><span>数十ナノ秒</span></div>
+      <div class="lv" style="width:100%;background:var(--l2)"><b>補助記憶（SSD・HDD）</b><span>マイクロ秒〜ミリ秒</span></div>
+    </div>
+    <div class="hier-axis"><span>↑ 上ほど：速い・小容量・高価</span><span>↓ 下ほど：遅い・大容量・安価</span></div>
+    <p class="note" style="margin-bottom:0">時間はおおよその目安です。「高価・安価」は1ビットあたりの値段のこと。</p>
+  </div>
+
+  <h2 id="flow">キャッシュメモリの働き</h2>
+  <p>CPU がデータを読むときは、まずキャッシュメモリを探します。よく使うデータのコピーをキャッシュに置いておくことで、遅い主記憶まで取りに行く回数を減らします。</p>
+  <div class="card">
+    <div class="seg" id="flow-tabs">
+      <button type="button" data-m="hit" aria-pressed="true">キャッシュにあった（ヒット）</button>
+      <button type="button" data-m="miss" aria-pressed="false">キャッシュになかった（ミス）</button>
+    </div>
+    <svg class="diagram" id="flow-svg" viewBox="0 0 340 130" style="max-width:520px" role="img" aria-label="CPU・キャッシュメモリ・主記憶の関係図"></svg>
+    <div id="flow-text"></div>
+  </div>
+  <div class="point"><b>用語：</b>読みたいデータがキャッシュにある割合が<b>ヒット率</b>。ない割合は <span class="mono">1 − ヒット率</span>（ミス率、NFP と呼ぶこともある）。</div>
+
+  <h2 id="calc">実効アクセス時間を計算する</h2>
+  <p>ヒットしたときは速く、ミスしたときは遅い。その<b>平均</b>が実効アクセス時間です。数値を変えて、式と帯の変化を見てみましょう。</p>
+  <div class="card">
+    <div class="slider">
+      <label for="c-h">ヒット率</label>
+      <input type="range" id="c-h" min="0" max="100" step="1" value="90">
+      <span class="v" id="c-hv"></span>
+    </div>
+    <div class="row-in">
+      <label>キャッシュ <input type="number" id="c-tc" value="10" min="0" max="100000"> ナノ秒</label>
+      <label>主記憶 <input type="number" id="c-tm" value="100" min="0" max="100000"> ナノ秒</label>
+    </div>
+    <div class="bar-cap">アクセスの回数の内訳（どちらから読んだか）</div>
+    <div class="bar" id="c-bar1"></div>
+    <div class="bar-cap">かかった時間の内訳（1回あたりの平均）</div>
+    <div class="bar" id="c-bar2"></div>
+    <div class="formula" id="c-formula"></div>
+    <div class="total" id="c-total"></div>
+    <p class="note" id="c-note" style="margin-bottom:0"></p>
+  </div>
+  <div class="point"><b>公式：</b><br>
+    <span class="mono">実効アクセス時間 ＝ キャッシュのアクセス時間 × ヒット率 ＋ 主記憶のアクセス時間 × (1 − ヒット率)</span><br>
+    「速いほうの時間 × 速いほうを使う割合 ＋ 遅いほうの時間 × 遅いほうを使う割合」という<b>平均の計算</b>です。</div>
+
+  <h2 id="inverse">実効アクセス時間からヒット率を求める</h2>
+  <p>逆算の問題も同じ式を使います。ヒット率を <span class="mono">h</span> と置いて、式に数値を入れてから解きます。</p>
+  <div class="card">
+    <div class="row-in">
+      <label>キャッシュ <input type="number" id="i-tc" value="10" min="0" max="100000"> ナノ秒</label>
+      <label>主記憶 <input type="number" id="i-tm" value="100" min="0" max="100000"> ナノ秒</label>
+      <label>実効アクセス時間 <input type="number" id="i-te" value="28" min="0" max="100000"> ナノ秒</label>
+    </div>
+    <div class="err" id="i-err"></div>
+    <div id="i-body">
+      <div class="formula" id="i-formula"></div>
+      <div class="bar-cap">数直線で見る：実効アクセス時間は、キャッシュと主記憶の間のどこにあるか</div>
+      <div class="bar" id="i-bar"></div>
+      <div class="ends" id="i-ends"></div>
+      <p id="i-text" style="margin-bottom:0"></p>
+    </div>
+  </div>
+  <div class="point"><b>近道：</b><span class="mono">ヒット率 ＝ (主記憶の時間 − 実効アクセス時間) ÷ (主記憶の時間 − キャッシュの時間)</span><br>
+    式を忘れても、<span class="mono">h</span> と置いて元の公式から解けば必ず出せます。</div>
+
+  <h2 id="tips">頻出パターンと注意点</h2>
+  <div class="card">
+    <ul style="margin:0">
+      <li><b>掛ける相手を逆にしない</b>：キャッシュの時間にはヒット率、主記憶の時間には <span class="mono">1 − ヒット率</span>。答えは必ず「キャッシュの時間」と「主記憶の時間」の間になるので、間にない答えが出たら計算ミス。</li>
+      <li><b>ヒット率が高いほど</b>、実効アクセス時間はキャッシュのアクセス時間に近づく（短くなる）。</li>
+      <li>問題文が「キャッシュにデータが<b>存在しない</b>確率」で与えられることがある。そのときはヒット率 ＝ 1 − その確率。</li>
+      <li>ミスが少し増えるだけで時間は大きく伸びる。上の計算機の初期値（キャッシュ 10、主記憶 100、ヒット率 90%）では、かかった時間の半分以上は 10% しかないミスの分。</li>
+      <li><b>1次キャッシュ・2次キャッシュ</b>：キャッシュを複数段にしたもの。CPU に近い順に 1次（L1）、2次（L2）と呼び、1次のほうが速くて小容量。</li>
+      <li><b>書込みの方式</b>：キャッシュと主記憶の両方に同時に書くのが<b>ライトスルー</b>、まずキャッシュだけに書いて後から主記憶に反映するのが<b>ライトバック</b>（こちらが高速）。</li>
+    </ul>
+  </div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const r4 = x => Math.round(x * 10000) / 10000;
+  const val = (id, d) => { const v = +$(id).value; return $(id).value === '' || !isFinite(v) || v < 0 ? d : v; };
+
+  // ---- CPU・キャッシュ・主記憶の関係図 ----
+  let flowMode = 'hit';
+  function renderFlow() {
+    const hit = flowMode === 'hit';
+    const box = (x, cls, name, sub) => `<g class="box ${cls}"><rect x="${x}" y="40" width="90" height="56" rx="10"/>
+      <text class="name" x="${x + 45}" y="64" text-anchor="middle">${name}</text>
+      <text class="sub" x="${x + 45}" y="82" text-anchor="middle">${sub}</text></g>`;
+    $('flow-svg').innerHTML =
+      `<line class="path act" x1="100" y1="68" x2="125" y2="68"/>
+       <line class="path ${hit ? '' : 'act'}" x1="215" y1="68" x2="240" y2="68"/>`
+      + box(10, 'act', 'CPU', '読みたい')
+      + box(125, hit ? 'act' : 'miss', 'キャッシュ', hit ? '○ あった' : '× ない')
+      + box(240, hit ? '' : 'act', '主記憶', hit ? '使わない' : 'ここから読む')
+      + `<text class="cap" x="170" y="24" text-anchor="middle">速い・小容量</text>
+         <text class="cap" x="285" y="24" text-anchor="middle">遅い・大容量</text>
+         <text class="cap" x="170" y="118" text-anchor="middle">${hit ? 'ここで完了' : ''}</text>`;
+    $('flow-text').innerHTML = hit
+      ? '<p><b>ヒット</b>：読みたいデータがキャッシュにあった。かかる時間は<b>キャッシュのアクセス時間</b>だけ。</p>'
+      : '<p><b>ミス</b>：キャッシュになかったので主記憶から読む。かかる時間は<b>主記憶のアクセス時間</b>。読んだデータはキャッシュにもコピーされ、次回からはヒットする。</p>';
+    document.querySelectorAll('#flow-tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === flowMode));
+  }
+  document.querySelectorAll('#flow-tabs button').forEach(b => b.addEventListener('click', () => { flowMode = b.dataset.m; renderFlow(); }));
+  renderFlow();
+
+  // ---- 実効アクセス時間 ----
+  function renderCalc() {
+    const hp = +$('c-h').value, h = hp / 100, m = r4(1 - h);
+    const tc = val('c-tc', 0), tm = val('c-tm', 0);
+    const a = r4(tc * h), b = r4(tm * m), t = r4(a + b);
+    $('c-hv').textContent = `${hp}%（${h}）`;
+    // 帯が細いときは文字が切れるので、短い表記にするか省く
+    const lab = (share, long, short) => (share >= 0.3 ? long : share >= 0.1 ? short : '');
+    $('c-bar1').innerHTML = `<div class="hit" style="flex:${hp}">${lab(h, `ヒット ${hp}%`, `${hp}%`)}</div><div class="miss" style="flex:${100 - hp}">${lab((100 - hp) / 100, `ミス ${100 - hp}%`, `${100 - hp}%`)}</div>`;
+    $('c-bar2').innerHTML = (a + b > 0)
+      ? `<div class="hit" style="flex:${a}">${lab(a / (a + b), `キャッシュ分 ${a}`, a)}</div><div class="miss" style="flex:${b}">${lab(b / (a + b), `主記憶分 ${b}`, b)}</div>`
+      : '';
+    $('c-formula').innerHTML = `キャッシュ × ヒット率 + 主記憶 × (1 − ヒット率)<br>
+      = ${tc} × ${h} + ${tm} × (1 − ${h})<br>
+      = ${tc} × ${h} + ${tm} × ${m}<br>
+      = ${a} + ${b} = <b>${t}</b>`;
+    $('c-total').innerHTML = `実効アクセス時間：<span class="big">${t}</span> ナノ秒`;
+    $('c-note').textContent = `100回アクセスしたと考えると、${hp}回は ${tc} ナノ秒、${100 - hp}回は ${tm} ナノ秒。`
+      + `合計 ${r4(tc * hp)} + ${r4(tm * (100 - hp))} = ${r4(tc * hp + tm * (100 - hp))} ナノ秒なので、1回あたり ${t} ナノ秒。`;
+  }
+  ['c-h', 'c-tc', 'c-tm'].forEach(id => $(id).addEventListener('input', renderCalc));
+  renderCalc();
+
+  // ---- 逆算 ----
+  function renderInv() {
+    const tc = val('i-tc', 0), tm = val('i-tm', 0), te = val('i-te', 0);
+    let err = '';
+    if (tm <= tc) err = '主記憶のアクセス時間は、キャッシュより大きい値にしてください。';
+    else if (te < tc || te > tm) err = `実効アクセス時間は、キャッシュ（${tc}）と主記憶（${tm}）の間の値になります。その範囲で入力してください。`;
+    $('i-err').textContent = err;
+    $('i-body').hidden = !!err;
+    if (err) return;
+    const d = r4(tm - tc), n = r4(tm - te), h = r4(n / d);
+    $('i-formula').innerHTML = `${te} = ${tc} × h + ${tm} × (1 − h)<br>
+      ${te} = ${tc}h + ${tm} − ${tm}h<br>
+      ${te} = ${tm} − ${d}h<br>
+      ${d}h = ${tm} − ${te} = ${n}<br>
+      h = ${n} ÷ ${d} = <b>${h}</b>`;
+    const left = r4(te - tc);
+    $('i-bar').innerHTML = `<div class="miss" style="flex:${left}">${left}</div><div class="hit" style="flex:${n}">${n}</div>`;
+    $('i-ends').innerHTML = `<span>← キャッシュ ${tc}</span><span>主記憶 ${tm} →</span>`;
+    $('i-text').innerHTML = `赤と緑の境目が実効アクセス時間 <b>${te}</b>。全体の幅 ${d} のうち、主記憶側からの距離（緑）が ${n} なので、ヒット率は <span class="mono">${n} ÷ ${d} = <b>${h}</b></span>（${r4(h * 100)}%）。<br>
+      <span class="note">境目がキャッシュ側（左）に寄っているほど、ヒット率が高いということです。</span>`;
+  }
+  ['i-tc', 'i-tm', 'i-te'].forEach(id => $(id).addEventListener('input', renderInv));
+  renderInv();
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'cache', [
+    { q: 'キャッシュメモリのアクセス時間が 10 ナノ秒、主記憶のアクセス時間が 60 ナノ秒、ヒット率が 0.9 のとき、実効アクセス時間は何ナノ秒か。',
+      choices: ['15 ナノ秒', '20 ナノ秒', '35 ナノ秒', '55 ナノ秒'], answer: 0,
+      explain: '10 × 0.9 + 60 × (1 − 0.9) = 9 + 6 = 15 ナノ秒。55 は掛ける相手を逆にした値、35 は単純に平均した値です。' },
+    { q: 'キャッシュメモリのアクセス時間が 20 ナノ秒、主記憶のアクセス時間が 120 ナノ秒で、実効アクセス時間が 40 ナノ秒であった。ヒット率はいくらか。',
+      choices: ['0.6', '0.7', '0.8', '0.9'], answer: 2,
+      explain: 'ヒット率を h とすると 40 = 20h + 120(1 − h) = 120 − 100h。100h = 80 なので h = 0.8。検算：20 × 0.8 + 120 × 0.2 = 16 + 24 = 40。' },
+    { q: 'キャッシュメモリを用いる目的として、最も適切なものはどれか。',
+      choices: ['主記憶の容量が足りないとき、補助記憶を使って見かけの容量を増やす', 'CPU と主記憶の速度差を埋めて、データの読み書きを高速にする', '電源を切ってもデータが消えないようにする', '複数のプログラムが同じ領域を同時に書き換えないようにする'], answer: 1,
+      explain: 'キャッシュメモリは、高速な CPU と低速な主記憶の間に置き、速度差を埋めるためのものです。補助記憶で見かけの容量を増やすのは仮想記憶の説明です。' },
+    { q: '記憶装置を、アクセス速度が速いものから順に並べたものはどれか。',
+      choices: ['レジスタ → キャッシュメモリ → 主記憶 → 補助記憶', 'キャッシュメモリ → レジスタ → 主記憶 → 補助記憶', 'レジスタ → 主記憶 → キャッシュメモリ → 補助記憶', '補助記憶 → 主記憶 → キャッシュメモリ → レジスタ'], answer: 0,
+      explain: 'CPU に近いほど速く、小容量です。レジスタ（CPU 内部）→ キャッシュメモリ → 主記憶 → 補助記憶の順です。' },
+    { q: 'キャッシュメモリのアクセス時間が 10 ナノ秒、主記憶のアクセス時間が 70 ナノ秒である。読みたいデータがキャッシュメモリに<b>存在しない</b>確率が 0.05 のとき、実効アクセス時間は何ナノ秒か。',
+      choices: ['13 ナノ秒', '22 ナノ秒', '40 ナノ秒', '67 ナノ秒'], answer: 0,
+      explain: '存在しない確率が 0.05 なので、ヒット率は 0.95。10 × 0.95 + 70 × 0.05 = 9.5 + 3.5 = 13 ナノ秒。' },
+    { q: 'キャッシュメモリのアクセス時間が 5 ナノ秒、主記憶のアクセス時間が 50 ナノ秒である。ヒット率が 0.8 から 0.9 に上がると、実効アクセス時間は何ナノ秒短くなるか。',
+      choices: ['0.5 ナノ秒', '4.5 ナノ秒', '9.5 ナノ秒', '14 ナノ秒'], answer: 1,
+      explain: 'ヒット率 0.8：5 × 0.8 + 50 × 0.2 = 4 + 10 = 14。ヒット率 0.9：5 × 0.9 + 50 × 0.1 = 4.5 + 5 = 9.5。差は 14 − 9.5 = 4.5 ナノ秒。' },
+  ]);
+})();
+</script>
+</body>
+</html>

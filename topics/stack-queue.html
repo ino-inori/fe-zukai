@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>スタックとキュー | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .ds-wrap { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 680px) { .ds-wrap { grid-template-columns: 1fr; } }
+  .ds-title { font-weight: 700; margin-bottom: 8px; }
+  .ds-title .note { margin-left: 8px; font-weight: 400; }
+  .stack-box {
+    width: 120px; min-height: 206px; padding: 6px; display: flex; flex-direction: column-reverse; gap: 6px;
+    border: 3px solid var(--text); border-top: none; border-radius: 0 0 10px 10px;
+  }
+  .queue-area { max-width: 300px; }
+  .queue-box {
+    min-height: 52px; padding: 6px 0; display: flex; gap: 6px;
+    border-top: 3px solid var(--text); border-bottom: 3px solid var(--text);
+  }
+  .queue-box .cell { width: 44px; flex: none; }
+  .q-cap { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .s-cap { font-size: 12px; color: var(--muted); margin-bottom: 2px; width: 120px; text-align: center; }
+  .cell {
+    height: 34px; display: flex; align-items: center; justify-content: center;
+    font: 700 16px "Consolas", monospace; border-radius: 8px;
+    background: var(--accent-soft); border: 1.5px solid var(--accent); color: var(--text);
+  }
+  .cell.next { background: var(--on-soft); border-color: var(--on); }
+  .out { margin-top: 8px; font-size: 15px; }
+  .out b { font-family: "Consolas", monospace; color: var(--accent); font-size: 17px; }
+  .legend { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--on-soft); border: 1.5px solid var(--on); vertical-align: -1px; margin-right: 5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .chip {
+    font: 14px "Consolas", monospace; padding: 3px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); white-space: nowrap;
+  }
+  .chip.done { color: var(--muted); background: var(--surface-2); }
+  .chip.cur { border-color: var(--on); background: var(--on-soft); font-weight: 700; }
+  .msg { background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 15px; min-height: 48px; }
+  .msg .mono b { color: var(--accent); }
+  .rpn-wrap { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 680px) { .rpn-wrap { grid-template-columns: 1fr; } }
+  .row-in { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row-in input[type="text"] { width: 260px; max-width: 100%; font-family: "Consolas", monospace; }
+  .err { color: var(--ng); font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › アルゴリズムとデータ構造</div>
+  <h1 class="page-title">スタックとキュー</h1>
+  <p class="page-lead">データを一時的にためておく2つの入れ物。違いは<b>取り出す順番</b>だけです。「この操作をしたら何が取り出されるか」を追う問題が科目A・科目Bの両方で出題されます。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#basic">違いを触る</a><a href="#replay">操作列を追う</a><a href="#usage">使われ方</a><a href="#rpn">逆ポーランド記法</a><a href="#tips">頻出パターン</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="basic">同じ値を入れて、取り出す順を比べる</h2>
+  <p>「入れる」を何回か押してから「取り出す」を押してみましょう。スタックとキューに<b>同じ値を同じ順番で</b>入れていますが、出てくる順番が違います。</p>
+  <div class="card">
+    <div class="btn-row">
+      <button class="btn primary" id="p-in" type="button"></button>
+      <button class="btn" id="p-out" type="button">取り出す</button>
+      <button class="btn" id="p-reset" type="button">リセット</button>
+    </div>
+    <div id="p-ds"></div>
+    <div class="msg" id="p-msg"></div>
+  </div>
+  <div class="point"><b>ポイント：</b><br>
+    ・<b>スタック</b>＝<b>後入れ先出し（LIFO：Last In First Out）</b>。積み上げた本の山。入れるのも取り出すのも一番上。入れる操作が <span class="mono">push</span>、取り出す操作が <span class="mono">pop</span>。<br>
+    ・<b>キュー</b>＝<b>先入れ先出し（FIFO：First In First Out）</b>。レジの行列。後ろに並んで前から出る。入れる操作が <span class="mono">enqueue</span>、取り出す操作が <span class="mono">dequeue</span>。</div>
+
+  <h2 id="replay">操作列を1手ずつ追う</h2>
+  <p>試験では「この順に操作したとき、取り出される値の順は？」と問われます。頭の中だけで追わず、<b>入れ物の中身を1手ごとに書く</b>のが確実です。</p>
+  <div class="card">
+    <div class="seg" id="r-tabs"></div>
+    <div class="chips" id="r-chips"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="r-next" type="button">1手進める ▶</button>
+      <button class="btn" id="r-prev" type="button">◀ 1手戻す</button>
+      <button class="btn" id="r-reset" type="button">最初から</button>
+    </div>
+    <div id="r-ds"></div>
+    <div class="msg" id="r-msg"></div>
+    <p class="note" style="margin-bottom:0">キューの側では、同じ操作列の push を enqueue、pop を dequeue と読み替えて実行しています。</p>
+  </div>
+
+  <h2 id="usage">どこで使われている？</h2>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th>スタック</th><td>
+        <b>関数（サブルーチン）呼び出し</b>：呼び出すたびに「戻り先」と局所変数を積み、戻るときに一番上から取り出す。最後に呼んだ関数から先に終わるので LIFO がぴったり。<br>
+        <b>再帰呼び出し</b>：自分自身を呼ぶたびに積まれていく。深すぎるとスタックがあふれる（スタックオーバーフロー）。<br>
+        <b>逆ポーランド記法の計算</b>、かっこの対応チェック、「元に戻す（Undo）」、深さ優先探索。</td></tr>
+      <tr><th>キュー</th><td>
+        <b>待ち行列</b>：到着した順に処理する。<b>印刷ジョブ</b>の順番待ち、OS のタスクの実行待ち、メッセージの受け渡し。<br>
+        幅優先探索、キーボード入力などのバッファ。</td></tr>
+    </table>
+  </div>
+
+  <h2 id="rpn">逆ポーランド記法をスタックで計算する</h2>
+  <p><b>逆ポーランド記法（後置記法）</b>は、演算子を「計算する2つの値の<b>後ろ</b>」に書く書き方です。かっこが要らず、左から読むだけでスタックを使って計算できます。</p>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th>ふつうの書き方（中置記法）</th><th>逆ポーランド記法</th></tr>
+      <tr><td class="mono">3 + 4</td><td class="mono">3 4 +</td></tr>
+      <tr><td class="mono">(3 + 4) × 2</td><td class="mono">3 4 + 2 ×</td></tr>
+      <tr><td class="mono">3 + 4 × 2</td><td class="mono">3 4 2 × +</td></tr>
+      <tr><td class="mono">(A + B) × (C − D)</td><td class="mono">A B + C D − ×</td></tr>
+    </table>
+  </div>
+  <div class="point"><b>計算のルール：</b>左から1つずつ読み、<b>数値なら push</b>。<b>演算子なら2つ pop して計算し、結果を push</b>。最後にスタックに残った1つが答え。</div>
+  <div class="card">
+    <div class="seg" id="n-tabs"></div>
+    <div class="row-in">
+      <input type="text" id="n-in" aria-label="逆ポーランド記法の式" autocomplete="off">
+      <button class="btn" id="n-set" type="button">この式で計算</button>
+    </div>
+    <p class="note">数値と演算子（+ − × ÷。* と / でも可）を空白で区切って入力できます。</p>
+    <div class="err" id="n-err"></div>
+    <div class="chips" id="n-chips"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="n-next" type="button">1手進める ▶</button>
+      <button class="btn" id="n-prev" type="button">◀ 1手戻す</button>
+      <button class="btn" id="n-reset" type="button">最初から</button>
+    </div>
+    <div class="rpn-wrap">
+      <div>
+        <div class="s-cap">↓ push　　pop ↑</div>
+        <div class="stack-box" id="n-stack"></div>
+      </div>
+      <div class="msg" id="n-msg" style="margin-top:0"></div>
+    </div>
+  </div>
+  <p class="note">引き算・割り算は順番に注意。<b>先に pop した値が右側、後に pop した値が左側</b>です（<span class="mono">8 2 −</span> は 8 − 2）。</p>
+
+  <h2 id="tips">頻出パターン</h2>
+  <div class="card">
+    <ul style="margin:0">
+      <li><b>取り出し順を答える</b>：操作列を左から順に、入れ物の中身を書きながら追う。上の「操作列を1手ずつ追う」と同じ作業。</li>
+      <li><b>あり得ない取り出し順</b>：スタックに A, B, C の順で push するとき（途中で pop してよい）、<span class="mono">C, A, B</span> の順には取り出せない。C を取り出した時点で B が A の上にあるため、A を先に取り出せない。</li>
+      <li><b>キューは順番が変わらない</b>：どのタイミングで取り出しても、入れた順のまま出てくる。</li>
+      <li><b>スタックとキューを組み合わせる</b>：「スタックから取り出してキューに入れる」などの問題は、2つの入れ物を別々に書いて追う。スタックを1回通すと順番が逆になる。</li>
+      <li><b>配列で実現する</b>：スタックは「一番上の位置」を1つ覚えておけばよい（スタックポインタ）。キューは「先頭」と「末尾」の2つの位置を覚える。</li>
+    </ul>
+  </div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const seq = a => (a.length ? a.join(' → ') : '（まだなし）');
+
+  // スタックは配列の末尾が一番上、キューは配列の先頭が出口
+  function drawStack(el, arr) {
+    el.innerHTML = arr.map((v, i) => `<div class="cell${i === arr.length - 1 ? ' next' : ''}">${v}</div>`).join('');
+  }
+  function drawQueue(el, arr) {
+    el.innerHTML = arr.map((v, i) => `<div class="cell${i === 0 ? ' next' : ''}">${v}</div>`).join('');
+  }
+  function dsMarkup(p) {
+    return `<div class="ds-wrap">
+      <div>
+        <div class="ds-title">スタック<span class="note">後入れ先出し</span></div>
+        <div class="s-cap">↓ push　　pop ↑</div>
+        <div class="stack-box" id="${p}-stack"></div>
+        <div class="out">取り出した順：<b id="${p}-sout"></b></div>
+      </div>
+      <div>
+        <div class="ds-title">キュー<span class="note">先入れ先出し</span></div>
+        <div class="queue-area">
+          <div class="queue-box" id="${p}-queue"></div>
+          <div class="q-cap"><span>← 出口（先頭）</span><span>入口（末尾）←</span></div>
+        </div>
+        <div class="out">取り出した順：<b id="${p}-qout"></b></div>
+      </div>
+    </div>
+    <p class="legend"><i></i>次に取り出される要素</p>`;
+  }
+  function drawDs(p, st) {
+    drawStack($(p + '-stack'), st.stack);
+    drawQueue($(p + '-queue'), st.queue);
+    $(p + '-sout').textContent = seq(st.so);
+    $(p + '-qout').textContent = seq(st.qo);
+  }
+
+  // ---- 操作パネル ----
+  $('p-ds').innerHTML = dsMarkup('p');
+  const MAX = 5;
+  let panel, nextVal;
+  function panelReset() {
+    panel = { stack: [], queue: [], so: [], qo: [] };
+    nextVal = 1;
+    renderPanel('「入れる」を押すと、スタックとキューの両方に同じ値が入ります。');
+  }
+  function renderPanel(msg) {
+    drawDs('p', panel);
+    $('p-in').textContent = `入れる（次は ${nextVal}）`;
+    $('p-in').disabled = panel.stack.length >= MAX;
+    $('p-out').disabled = panel.stack.length === 0;
+    $('p-msg').innerHTML = msg;
+  }
+  $('p-in').addEventListener('click', () => {
+    const v = nextVal++;
+    panel.stack.push(v);
+    panel.queue.push(v);
+    renderPanel(`<b>${v}</b> を入れた。スタックは<b>一番上</b>に積まれ、キューは<b>末尾</b>に並ぶ。`
+      + (panel.stack.length >= MAX ? '（図に入るのは5個まで。取り出してみましょう）' : ''));
+  });
+  $('p-out').addEventListener('click', () => {
+    const s = panel.stack.pop(), q = panel.queue.shift();
+    panel.so.push(s);
+    panel.qo.push(q);
+    renderPanel(`スタックからは一番上の <b>${s}</b>（残っている中で<b>最後</b>に入れた値）、キューからは先頭の <b>${q}</b>（残っている中で<b>最初</b>に入れた値）が出てきた。`);
+  });
+  $('p-reset').addEventListener('click', panelReset);
+  panelReset();
+
+  // ---- 操作列の再生（null は pop）----
+  const SEQS = [
+    { name: '例1', ops: ['1', '2', null, '3', null, null] },
+    { name: '例2', ops: ['1', '2', '3', null, null, '4', null, null] },
+    { name: '例3', ops: ['A', null, 'B', 'C', null, 'D', null, null] },
+  ];
+  $('r-ds').innerHTML = dsMarkup('r');
+  let rSeq = SEQS[0], rStep = 0;
+  function runOps(ops, k) {
+    const st = { stack: [], queue: [], so: [], qo: [], last: null };
+    for (let i = 0; i < k; i++) {
+      if (ops[i] === null) {
+        const s = st.stack.pop(), q = st.queue.shift();
+        st.so.push(s);
+        st.qo.push(q);
+        st.last = { s, q };
+      } else {
+        st.stack.push(ops[i]);
+        st.queue.push(ops[i]);
+        st.last = null;
+      }
+    }
+    return st;
+  }
+  function renderReplay() {
+    const ops = rSeq.ops, st = runOps(ops, rStep);
+    $('r-chips').innerHTML = ops.map((o, i) =>
+      `<span class="chip${i < rStep - 1 ? ' done' : i === rStep - 1 ? ' cur' : ''}">${o === null ? 'pop' : 'push ' + o}</span>`).join('');
+    drawDs('r', st);
+    let msg;
+    if (rStep === 0) msg = '「1手進める」で操作を1つずつ実行します。';
+    else {
+      const o = ops[rStep - 1];
+      msg = `<b>${rStep}手目：${o === null ? 'pop' : 'push ' + o}</b><br>`;
+      msg += o === null
+        ? `スタックは一番上の <b>${st.last.s}</b> を取り出す。キューは先頭の <b>${st.last.q}</b> を取り出す。`
+        : `スタックは一番上に <b>${o}</b> を積む。キューは末尾に <b>${o}</b> を並べる。`;
+      if (rStep === ops.length) {
+        msg += `<br>すべての操作が終了。取り出した順は、スタックが <span class="mono"><b>${st.so.join(', ')}</b></span>、キューが <span class="mono"><b>${st.qo.join(', ')}</b></span>。`;
+      }
+    }
+    $('r-msg').innerHTML = msg;
+    $('r-next').disabled = rStep >= ops.length;
+    $('r-prev').disabled = rStep === 0;
+    document.querySelectorAll('#r-tabs button').forEach(b => b.setAttribute('aria-pressed', b.textContent === rSeq.name));
+  }
+  SEQS.forEach(s => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = s.name;
+    b.addEventListener('click', () => { rSeq = s; rStep = 0; renderReplay(); });
+    $('r-tabs').appendChild(b);
+  });
+  $('r-next').addEventListener('click', () => { rStep++; renderReplay(); });
+  $('r-prev').addEventListener('click', () => { rStep--; renderReplay(); });
+  $('r-reset').addEventListener('click', () => { rStep = 0; renderReplay(); });
+  renderReplay();
+
+  // ---- 逆ポーランド記法 ----
+  const RPN_PRESETS = ['3 4 + 2 ×', '3 4 2 × +', '5 1 2 + 4 × + 3 −', '8 2 3 + × 4 ÷'];
+  const OPS = { '+': '+', '-': '−', '−': '−', '*': '×', '×': '×', '/': '÷', '÷': '÷' };
+  const PREC = { '+': 1, '−': 1, '×': 2, '÷': 2 };
+  const num = x => String(Math.round(x * 10000) / 10000);
+  let nTokens = [], nStates = [], nStep = 0;
+
+  function parseRpn(str) {
+    const raw = str.trim().split(/\s+/).filter(Boolean);
+    if (!raw.length) return { err: '式を入力してください。' };
+    if (raw.length > 21) return { err: '長すぎます（21個まで）。' };
+    const tokens = [];
+    for (const t of raw) {
+      if (/^-?\d+(\.\d+)?$/.test(t)) tokens.push({ num: true, v: +t, s: t });
+      else if (OPS[t]) tokens.push({ num: false, s: OPS[t] });
+      else return { err: `「${t}」は数値でも演算子でもありません。空白で区切って入力してください。` };
+    }
+    return { tokens };
+  }
+  // 1手ごとのスタックの状態を前もって全部作る。途中で計算できなくなったらそこで止める
+  function buildStates(tokens) {
+    const states = [{ stack: [], msg: '「1手進める」で式を左から1つずつ読みます。' }];
+    let stack = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      let msg, stop = false;
+      if (t.num) {
+        stack = stack.concat({ v: t.v, s: t.s, p: 3 });
+        msg = `<b>${t.s}</b> は数値 → スタックに push。`;
+      } else if (stack.length < 2) {
+        msg = `<b>${t.s}</b> は演算子だが、スタックに値が2つない → この式は正しくありません。`;
+        stop = true;
+      } else {
+        const r = stack[stack.length - 1], l = stack[stack.length - 2];
+        if (t.s === '÷' && r.v === 0) {
+          msg = `<b>÷</b> は演算子 → 2つ pop したが、0 では割れません。`;
+          stop = true;
+        } else {
+          const v = t.s === '+' ? l.v + r.v : t.s === '−' ? l.v - r.v : t.s === '×' ? l.v * r.v : l.v / r.v;
+          const q = PREC[t.s];
+          const ls = l.p < q ? `(${l.s})` : l.s;
+          const rs = (r.p < q || (r.p === q && (t.s === '−' || t.s === '÷'))) ? `(${r.s})` : r.s;
+          stack = stack.slice(0, -2).concat({ v, s: `${ls} ${t.s} ${rs}`, p: q });
+          msg = `<b>${t.s}</b> は演算子 → 2つ pop（先に出た <b>${num(r.v)}</b> が右、次に出た <b>${num(l.v)}</b> が左）。<br>
+            <span class="mono">${num(l.v)} ${t.s} ${num(r.v)} = <b>${num(v)}</b></span> を push。`;
+        }
+      }
+      if (!stop && i === tokens.length - 1) {
+        msg += stack.length === 1
+          ? `<br>式を最後まで読んだ。スタックに残った <span class="mono"><b>${num(stack[0].v)}</b></span> が答え。<br>ふつうの書き方では <span class="mono">${stack[0].s}</span>。`
+          : '<br>式を最後まで読んだが、スタックに値が2つ以上残っている → 演算子が足りません。';
+      }
+      states.push({ stack, msg });
+      if (stop) break;
+    }
+    return states;
+  }
+  function setRpn(str) {
+    const res = parseRpn(str);
+    if (res.err) { $('n-err').textContent = res.err; return; }
+    $('n-err').textContent = '';
+    nTokens = res.tokens;
+    nStates = buildStates(nTokens);
+    nStep = 0;
+    $('n-in').value = nTokens.map(t => t.s).join(' ');
+    renderRpn();
+  }
+  function renderRpn() {
+    const st = nStates[nStep];
+    $('n-chips').innerHTML = nTokens.map((t, i) =>
+      `<span class="chip${i < nStep - 1 ? ' done' : i === nStep - 1 ? ' cur' : ''}">${t.s}</span>`).join('');
+    drawStack($('n-stack'), st.stack.map(x => num(x.v)));
+    $('n-msg').innerHTML = st.msg;
+    $('n-next').disabled = nStep >= nStates.length - 1;
+    $('n-prev').disabled = nStep === 0;
+    const cur = $('n-in').value;
+    document.querySelectorAll('#n-tabs button').forEach(b => b.setAttribute('aria-pressed', b.textContent === cur));
+  }
+  RPN_PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mono';
+    b.textContent = p;
+    b.addEventListener('click', () => setRpn(p));
+    $('n-tabs').appendChild(b);
+  });
+  $('n-set').addEventListener('click', () => setRpn($('n-in').value));
+  $('n-in').addEventListener('keydown', e => { if (e.key === 'Enter') setRpn($('n-in').value); });
+  $('n-next').addEventListener('click', () => { nStep++; renderRpn(); });
+  $('n-prev').addEventListener('click', () => { nStep--; renderRpn(); });
+  $('n-reset').addEventListener('click', () => { nStep = 0; renderRpn(); });
+  setRpn(RPN_PRESETS[0]);
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'stack', [
+    { q: '空のスタックに対して、push 1 → push 2 → pop → push 3 → pop → pop の順に操作した。取り出される値の順はどれか。',
+      choices: ['1, 2, 3', '2, 3, 1', '3, 2, 1', '2, 1, 3'], answer: 1,
+      explain: '1, 2 を積んで pop すると一番上の 2。3 を積んで pop すると 3。最後に残っていた 1 が出ます。「操作列を1手ずつ追う」の例1で確かめられます。' },
+    { q: '空のキューに対して、enqueue 1 → enqueue 2 → dequeue → enqueue 3 → dequeue → dequeue の順に操作した。取り出される値の順はどれか。',
+      choices: ['1, 2, 3', '2, 3, 1', '3, 2, 1', '2, 1, 3'], answer: 0,
+      explain: 'キューは先入れ先出し。どのタイミングで取り出しても、入れた順（1, 2, 3）のまま出てきます。' },
+    { q: '空のスタックに A, B, C, D の順で push する。途中の好きなタイミングで pop してよいとき、取り出す順として<b>あり得ない</b>ものはどれか。',
+      choices: ['A, B, C, D', 'B, A, D, C', 'D, C, B, A', 'C, A, B, D'], answer: 3,
+      explain: 'C を最初に取り出すには A, B, C を積んでおく必要があります。そのときスタックには下から A, B が残り、B が上にあるので、A を B より先に取り出すことはできません。' },
+    { q: '逆ポーランド記法で書かれた式 <span class="mono">2 3 4 × +</span> の値はいくつか。',
+      choices: ['9', '14', '20', '24'], answer: 1,
+      explain: '2, 3, 4 を push。× で 3 × 4 = 12 を push。+ で 2 + 12 = 14。ふつうの書き方では 2 + 3 × 4 です。' },
+    { q: '式 <span class="mono">(A + B) × C</span> を逆ポーランド記法で表したものはどれか。',
+      choices: ['A B + C ×', 'A B C + ×', '× + A B C', 'A + B C ×'], answer: 0,
+      explain: 'まず A + B を「A B +」と書き、それと C を掛けるので後ろに「C ×」を付けます。「A B C + ×」は A × (B + C) になります。' },
+    { q: 'プログラムが関数を呼び出すとき、戻り先のアドレスや局所変数を保存しておくのに使われるデータ構造はどれか。',
+      choices: ['キュー', 'スタック', '2分探索木', 'ハッシュ表'], answer: 1,
+      explain: '最後に呼び出した関数から先に戻るので、後入れ先出しのスタックが使われます。再帰呼び出しも同じ仕組みです。' },
+    { q: '空のキューに 1, 2, 3 の順で値を入れた。次に、キューから値を1つ取り出すたびにそれを空のスタックへ push し、キューが空になったらスタックが空になるまで pop した。スタックから取り出される値の順はどれか。',
+      choices: ['1, 2, 3', '1, 3, 2', '3, 2, 1', '2, 3, 1'], answer: 2,
+      explain: 'キューからは 1, 2, 3 の順で出てくるので、スタックには 1, 2, 3 の順で積まれます。スタックは後入れ先出しなので 3, 2, 1 の順で取り出されます。' },
+  ]);
+})();
+</script>
+</body>
+</html>

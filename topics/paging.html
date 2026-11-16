@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ページング・ページ置換 | 触って理解する基本情報</title>
+<link rel="stylesheet" href="../css/style.css">
+<script src="../js/common.js"></script>
+<style>
+  .vm { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-items: start; }
+  .vm .col { background: var(--surface-2); border-radius: 10px; padding: 8px; min-width: 0; }
+  .vm .col-t { font-size: 13px; font-weight: 700; line-height: 1.4; margin-bottom: 6px; }
+  .vm .col-t span { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+  .pages { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pg {
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; padding: 0;
+    font: 700 16px "Consolas", monospace; border-radius: 8px;
+    background: var(--surface); border: 1.5px solid var(--border); color: var(--text);
+  }
+  button.pg { cursor: pointer; }
+  button.pg:hover { border-color: var(--accent); }
+  button.pg.in { background: var(--accent-soft); border-color: var(--accent); }
+  .frames { display: grid; gap: 6px; }
+  .frame {
+    height: 34px; display: flex; align-items: center; justify-content: center;
+    font: 700 16px "Consolas", monospace; border-radius: 8px;
+    border: 1.5px dashed var(--off); color: var(--muted); background: var(--surface);
+  }
+  .frame.full { border-style: solid; border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .frame.new { border-color: var(--ng); background: var(--ng-soft); }
+  .frame.hit { border-color: var(--ok); background: var(--ok-soft); }
+  .msg { background: var(--surface-2); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 15px; min-height: 48px; }
+  .row-in { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 8px; }
+  .row-in input[type="text"] { width: 280px; max-width: 100%; font-family: "Consolas", monospace; }
+  .row-in .seg { margin-bottom: 0; }
+  .err { color: var(--ng); font-size: 14px; }
+  table.sim th, table.sim td { padding: 4px 5px; min-width: 27px; font-family: "Consolas", monospace; }
+  table.sim th.rh { font-family: inherit; font-size: 13px; white-space: nowrap; text-align: left; }
+  table.sim td.ref { font-weight: 700; background: var(--surface-2); }
+  table.sim td.cur { background: var(--accent-soft); }
+  table.sim td.new { background: var(--ng-soft); font-weight: 700; }
+  table.sim td.hit { background: var(--ok-soft); font-weight: 700; }
+  table.sim td.f { color: var(--ng); font-weight: 700; }
+  .algo-t { font-weight: 700; margin: 14px 0 0; }
+  .algo-t .cnt { font-family: "Consolas", monospace; color: var(--accent); font-size: 18px; }
+  .legend { display: flex; gap: 14px; font-size: 13px; flex-wrap: wrap; color: var(--muted); margin-top: 10px; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend .n::before { background: var(--ng-soft); border: 1px solid var(--ng); }
+  .legend .h::before { background: var(--ok-soft); border: 1px solid var(--ok); }
+  .total { margin-top: 12px; font-size: 16px; }
+  .big { font: 700 24px "Consolas", monospace; color: var(--accent); }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › OS</div>
+  <h1 class="page-title">ページング・ページ置換</h1>
+  <p class="page-lead">主記憶に入りきらないプログラムを動かす仕組みが仮想記憶。「主記憶がいっぱいのとき、<b>どのページを追い出すか</b>」を FIFO・LRU のルールで追いかけ、ページフォールトの回数を数える問題が定番です。<span class="freq">★★★</span></p>
+  <nav class="toc">
+    <a href="#vm">仮想記憶とページング</a><a href="#algo">置換アルゴリズム</a><a href="#sim">シミュレータ</a><a href="#tips">頻出パターン</a><a href="#quiz">確認問題</a>
+  </nav>
+
+  <h2 id="vm">仮想記憶とページング</h2>
+  <p><b>仮想記憶</b>は、補助記憶（SSD・HDD）を使って、主記憶を実際より大きく見せる仕組みです。プログラムを同じ大きさの<b>ページ</b>に区切り、<b>いま必要なページだけ</b>を主記憶に置きます。これが<b>ページング</b>です。</p>
+  <p>下のページ番号を押して「参照」してみましょう。主記憶のページ枠は3つしかありません。</p>
+  <div class="card">
+    <div class="vm">
+      <div class="col">
+        <div class="col-t">プログラムのページ<span>押すと参照する</span></div>
+        <div class="pages" id="vm-pages"></div>
+      </div>
+      <div class="col">
+        <div class="col-t">主記憶<span>ページ枠 3個</span></div>
+        <div class="frames" id="vm-frames"></div>
+      </div>
+      <div class="col">
+        <div class="col-t">補助記憶<span>主記憶にないページ</span></div>
+        <div class="pages" id="vm-disk"></div>
+      </div>
+    </div>
+    <div class="msg" id="vm-msg"></div>
+    <div class="btn-row" style="margin-bottom:0"><button class="btn" id="vm-reset" type="button">リセット</button><span class="note">ページフォールト：<b id="vm-count">0</b> 回</span></div>
+  </div>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th>ページ</th><td>プログラム（仮想記憶）を一定の大きさに区切ったもの。</td></tr>
+      <tr><th>ページ枠</th><td>主記憶を同じ大きさに区切ったもの。ページを1つ入れられる。ページフレームともいう。</td></tr>
+      <tr><th>ページフォールト</th><td>参照したページが<b>主記憶にない</b>ときに起きる割込み。これをきっかけに OS がページを読み込む。</td></tr>
+      <tr><th>ページイン</th><td>補助記憶から主記憶へページを読み込むこと。</td></tr>
+      <tr><th>ページアウト</th><td>主記憶から補助記憶へページを追い出すこと。空いている枠がないときに行う。</td></tr>
+    </table>
+  </div>
+  <div class="point"><b>流れ：</b>参照したページが主記憶にない → <b>ページフォールト</b> → 空きがなければ1ページを<b>ページアウト</b> → 必要なページを<b>ページイン</b>。<br>
+    補助記憶は遅いので、ページフォールトは少ないほどよい。そこで「どのページを追い出すか」が重要になります。</div>
+
+  <h2 id="algo">ページ置換アルゴリズム</h2>
+  <p>追い出すページの決め方です。名前と「何を追い出すか」をセットで覚えます。</p>
+  <div class="card table-wrap">
+    <table class="info">
+      <tr><th>FIFO<br><span class="note">First In First Out</span></th><td><b>最も古くに読み込まれた</b>ページを追い出す。途中で何回参照されても順番は変わらない。<br><span class="note">見るもの：主記憶に<b>入った</b>時刻</span></td></tr>
+      <tr><th>LRU<br><span class="note">Least Recently Used</span></th><td><b>最後に参照されてから最も時間がたっている</b>ページを追い出す。参照されるたびに「最近使った」扱いになる。<br><span class="note">見るもの：最後に<b>使った</b>時刻</span></td></tr>
+      <tr><th>LFU<br><span class="note">Least Frequently Used</span></th><td><b>参照された回数が最も少ない</b>ページを追い出す。<br><span class="note">見るもの：使った<b>回数</b></span></td></tr>
+    </table>
+  </div>
+  <p class="note">LRU の R は Recently（最近）、LFU の F は Frequently（頻繁に）。「最近使っていない」か「あまり使っていない」かの違いです。</p>
+
+  <h2 id="sim">FIFO と LRU を1手ずつ比べる</h2>
+  <p>参照するページの順番（参照列）とページ枠の数を決めて、1手ずつ進めてみましょう。最初はどの枠も空です。</p>
+  <div class="card">
+    <div class="seg" id="s-presets"></div>
+    <div class="row-in">
+      <label>参照列 <input type="text" id="s-refs" autocomplete="off" aria-label="参照列"></label>
+    </div>
+    <div class="row-in">
+      <span>ページ枠の数</span>
+      <div class="seg" id="s-frames"></div>
+    </div>
+    <div class="err" id="s-err"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="s-next" type="button">1手進める ▶</button>
+      <button class="btn" id="s-prev" type="button">◀ 1手戻す</button>
+      <button class="btn" id="s-end" type="button">最後まで</button>
+      <button class="btn" id="s-reset" type="button">最初から</button>
+    </div>
+    <div id="s-tables"></div>
+    <div class="legend"><span class="n">フォールトで読み込んだページ</span><span class="h">枠にあった（フォールトなし）</span></div>
+    <div class="msg" id="s-msg"></div>
+    <div class="total" id="s-total"></div>
+  </div>
+  <p class="note">参照列はページ番号をカンマか空白で区切って入力できます（20個まで）。表が横に長いときは、表の部分を横にスクロールできます。</p>
+
+  <h2 id="tips">頻出パターンと注意点</h2>
+  <div class="card">
+    <ul style="margin:0">
+      <li><b>表を書いて数える</b>：参照列を横に並べ、枠の中身を1手ずつ書く。上のシミュレータと同じ表を紙に書けるようにしておく。</li>
+      <li><b>最初に空の枠へ読み込むときもページフォールト</b>に数える。数え忘れが多いところ。</li>
+      <li><b>FIFO と LRU の違いが出るのは「枠にあるページを参照したとき」</b>。FIFO は何も変わらないが、LRU はそのページが「いちばん最近使った」ページになり、追い出されにくくなる。</li>
+      <li>LRU のほうが少なくなることが多いが、<b>必ず少ないとは限らない</b>（上の「FIFO が少ない例」）。</li>
+      <li><b>スラッシング</b>：主記憶が足りず、ページフォールトが多発してページイン・ページアウトばかりになり、処理が急に遅くなる現象。対策は主記憶を増やす、同時に動かすプログラムを減らす、など。</li>
+      <li>プログラムは一部分を集中して使う性質がある（<b>局所性</b>）。「最近使ったページはまたすぐ使う」と考えるのが LRU。</li>
+    </ul>
+  </div>
+
+  <h2 id="quiz">確認問題</h2>
+  <div id="quiz"></div>
+</main>
+<footer class="site-footer"><a href="../index.html">← トップへ戻る</a></footer>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  // ---- 仮想記憶の図（追い出しは FIFO）----
+  const VM_PAGES = [1, 2, 3, 4, 5, 6], VM_N = 3;
+  let vm;
+  function vmReset() {
+    vm = { frames: Array(VM_N).fill(null), loaded: Array(VM_N).fill(0), t: 0, count: 0 };
+    renderVm('ページ番号を押してください。最初は主記憶に何も入っていません。', -1, '');
+  }
+  function renderVm(msg, slot, cls) {
+    $('vm-pages').innerHTML = VM_PAGES.map(p =>
+      `<button type="button" class="pg${vm.frames.includes(p) ? ' in' : ''}" data-p="${p}">${p}</button>`).join('');
+    $('vm-frames').innerHTML = vm.frames.map((p, i) =>
+      `<div class="frame${p === null ? '' : ' full'}${i === slot ? ' ' + cls : ''}">${p === null ? '空き' : p}</div>`).join('');
+    $('vm-disk').innerHTML = VM_PAGES.filter(p => !vm.frames.includes(p)).map(p => `<div class="pg">${p}</div>`).join('');
+    $('vm-msg').innerHTML = msg;
+    $('vm-count').textContent = vm.count;
+    $('vm-pages').querySelectorAll('button').forEach(b => b.addEventListener('click', () => vmRef(+b.dataset.p)));
+  }
+  function vmRef(p) {
+    vm.t++;
+    let slot = vm.frames.indexOf(p);
+    if (slot >= 0) {
+      renderVm(`ページ <b>${p}</b> を参照 → 主記憶にある。そのまま使える（ページフォールトは起きない）。`, slot, 'hit');
+      return;
+    }
+    vm.count++;
+    slot = vm.frames.indexOf(null);
+    let msg = `ページ <b>${p}</b> を参照 → 主記憶にない → <b>ページフォールト</b>。`;
+    if (slot >= 0) msg += '空いているページ枠に読み込む（ページイン）。';
+    else {
+      slot = vm.loaded.indexOf(Math.min(...vm.loaded));
+      msg += `空きがないので、ページ <b>${vm.frames[slot]}</b> を補助記憶へ追い出し（ページアウト）、その枠に読み込む（ページイン）。<br>
+        <span class="note">ここでは一番古くに読み込んだページを追い出しています。どれを追い出すかの決め方が、次のページ置換アルゴリズムです。</span>`;
+    }
+    vm.frames[slot] = p;
+    vm.loaded[slot] = vm.t;
+    renderVm(msg, slot, 'new');
+  }
+  $('vm-reset').addEventListener('click', vmReset);
+  vmReset();
+
+  // ---- シミュレータ ----
+  // key[i] は枠 i のページの「追い出しの基準になる時刻」。FIFO は読み込んだ時刻、LRU は最後に参照した時刻
+  function simulate(refs, n, algo) {
+    const frames = Array(n).fill(null), key = Array(n).fill(0), steps = [];
+    refs.forEach((p, t) => {
+      let slot = frames.indexOf(p), fault = false, out = null;
+      if (slot >= 0) {
+        if (algo === 'LRU') key[slot] = t;
+      } else {
+        fault = true;
+        slot = frames.indexOf(null);
+        if (slot < 0) { slot = key.indexOf(Math.min(...key)); out = frames[slot]; }
+        frames[slot] = p;
+        key[slot] = t;
+      }
+      steps.push({ p, frames: frames.slice(), slot, fault, out });
+    });
+    return steps;
+  }
+  function parseRefs(str) {
+    const raw = str.split(/[\s,、，]+/).filter(Boolean);
+    if (!raw.length) return { err: '参照列を入力してください。' };
+    if (raw.length > 20) return { err: '長すぎます（20個まで）。' };
+    if (!raw.every(x => /^\d{1,2}$/.test(x))) return { err: 'ページ番号は 0〜99 の整数を、カンマか空白で区切って入力してください。' };
+    return { refs: raw.map(Number) };
+  }
+
+  const PRESETS = [
+    { name: 'LRU が少ない例', refs: '1, 2, 3, 1, 4, 1, 5, 2', n: 3 },
+    { name: '同じ回数の例', refs: '1, 2, 3, 1, 4, 2, 5, 1, 2, 3', n: 3 },
+    { name: 'FIFO が少ない例', refs: '1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5', n: 3 },
+  ];
+  let refs = [], nFrames = 3, step = 0, res = {};
+
+  function table(algo) {
+    const st = res[algo];
+    const cls = (t, extra) => `${t === step - 1 ? 'cur' : ''} ${t < step ? extra : ''}`.trim();
+    let h = `<tr><th class="rh">参照</th>${refs.map((p, t) => `<td class="ref${t === step - 1 ? ' cur' : ''}">${p}</td>`).join('')}</tr>`;
+    for (let i = 0; i < nFrames; i++) {
+      h += `<tr><th class="rh">枠${i + 1}</th>${st.map((s, t) => {
+        const mark = s.slot === i ? (s.fault ? 'new' : 'hit') : '';
+        const v = t < step && s.frames[i] !== null ? s.frames[i] : '';
+        return `<td class="${cls(t, mark)}">${v}</td>`;
+      }).join('')}</tr>`;
+    }
+    h += `<tr><th class="rh">フォールト</th>${st.map((s, t) => `<td class="${cls(t, 'f')}">${t < step && s.fault ? '●' : ''}</td>`).join('')}</tr>`;
+    h += `<tr><th class="rh">追い出し</th>${st.map((s, t) => `<td class="${cls(t, '')}">${t < step && s.out !== null ? s.out : ''}</td>`).join('')}</tr>`;
+    const cnt = st.slice(0, step).filter(s => s.fault).length;
+    return `<p class="algo-t">${algo}　ページフォールト <span class="cnt">${cnt}</span> 回</p>
+      <div class="table-wrap"><table class="tt sim">${h}</table></div>`;
+  }
+  function explain(algo) {
+    const s = res[algo][step - 1];
+    if (!s.fault) return `枠にある → フォールトなし。${algo === 'LRU' ? `ページ ${s.p} は「いちばん最近使った」ページになる。` : '読み込んだ順番は変わらない。'}`;
+    if (s.out === null) return '枠にない → <b>フォールト</b>。空いている枠に読み込む。';
+    return `枠にない → <b>フォールト</b>。${algo === 'LRU' ? '最後に参照されてから最も時間がたっている' : '最も古くに読み込んだ'}ページ <b>${s.out}</b> を追い出す。`;
+  }
+  function renderSim() {
+    $('s-tables').innerHTML = table('FIFO') + table('LRU');
+    // 表を作り直すと横スクロール位置が戻るので、いまの手の列が見える位置に合わせる
+    document.querySelectorAll('#s-tables .table-wrap').forEach(w => {
+      const c = w.querySelector('td.ref.cur');
+      if (c) w.scrollLeft = Math.max(0, c.offsetLeft + c.offsetWidth - w.clientWidth + 4);
+    });
+    $('s-next').disabled = $('s-end').disabled = step >= refs.length;
+    $('s-prev').disabled = step === 0;
+    if (step === 0) {
+      $('s-msg').innerHTML = '「1手進める」で、参照列の左から1つずつページを参照します。';
+    } else {
+      $('s-msg').innerHTML = `<b>${step}手目：ページ ${refs[step - 1]} を参照</b><br>FIFO：${explain('FIFO')}<br>LRU：${explain('LRU')}`;
+    }
+    if (step === refs.length) {
+      const f = res.FIFO.filter(s => s.fault).length, l = res.LRU.filter(s => s.fault).length;
+      const cmp = f === l ? 'この参照列ではどちらも同じ回数です。'
+        : f > l ? `LRU のほうが ${f - l} 回少なくなりました。`
+        : `FIFO のほうが ${l - f} 回少なくなりました。LRU がいつも有利とは限りません。`;
+      $('s-total').innerHTML = `合計　FIFO：<span class="big">${f}</span> 回　LRU：<span class="big">${l}</span> 回<br>${cmp}`;
+    } else {
+      $('s-total').innerHTML = '';
+    }
+    const cur = $('s-refs').value;
+    document.querySelectorAll('#s-presets button').forEach((b, i) =>
+      b.setAttribute('aria-pressed', PRESETS[i].refs === cur && PRESETS[i].n === nFrames));
+    document.querySelectorAll('#s-frames button').forEach(b => b.setAttribute('aria-pressed', +b.textContent === nFrames));
+  }
+  function setup() {
+    const r = parseRefs($('s-refs').value);
+    $('s-err').textContent = r.err || '';
+    if (r.err) return;
+    refs = r.refs;
+    res = { FIFO: simulate(refs, nFrames, 'FIFO'), LRU: simulate(refs, nFrames, 'LRU') };
+    step = 0;
+    renderSim();
+  }
+  PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = p.name;
+    b.addEventListener('click', () => { $('s-refs').value = p.refs; nFrames = p.n; setup(); });
+    $('s-presets').appendChild(b);
+  });
+  [2, 3, 4].forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = n;
+    b.addEventListener('click', () => { nFrames = n; setup(); });
+    $('s-frames').appendChild(b);
+  });
+  $('s-refs').addEventListener('input', setup);
+  $('s-next').addEventListener('click', () => { step++; renderSim(); });
+  $('s-prev').addEventListener('click', () => { step--; renderSim(); });
+  $('s-end').addEventListener('click', () => { step = refs.length; renderSim(); });
+  $('s-reset').addEventListener('click', () => { step = 0; renderSim(); });
+  $('s-refs').value = PRESETS[0].refs;
+  setup();
+
+  // ---- 確認問題 ----
+  FE.quiz($('quiz'), 'paging', [
+    { q: '仮想記憶におけるページフォールトの説明として、適切なものはどれか。',
+      choices: ['参照しようとしたページが主記憶に存在しないときに発生する割込み', '主記憶のページを補助記憶に書き出す処理', '補助記憶の空き容量がなくなったときに発生するエラー', 'プログラムが許可されていない領域を書き換えようとしたときの保護機能'], answer: 0,
+      explain: '参照したページが主記憶にないときに起きる割込みがページフォールトです。主記憶から補助記憶へ書き出すのはページアウトです。' },
+    { q: 'ページ枠が3つあり、最初はすべて空である。ページを 1, 2, 3, 1, 4, 1, 5, 2 の順に参照するとき、FIFO 方式でのページフォールトの回数は何回か。',
+      choices: ['5回', '6回', '7回', '8回'], answer: 2,
+      explain: '1, 2, 3 で3回。1 はあるので0回。4 で 1 を追い出し、次の 1 でまたフォールト（2 を追い出す）。5（3 を追い出す）、2（4 を追い出す）でもフォールト。合計 3 + 4 = 7回。シミュレータの「LRU が少ない例」で確かめられます（LRU なら6回）。' },
+    { q: 'ページ枠が3つあり、最初はすべて空である。LRU 方式でページを 1, 2, 3, 2, 1, 4 の順に参照するとき、ページ 4 を読み込むために追い出されるページはどれか。',
+      choices: ['ページ 1', 'ページ 2', 'ページ 3', 'どのページも追い出されない'], answer: 2,
+      explain: '4 を参照する直前、最後に参照した順は 3 → 2 → 1。最後に参照されてから最も時間がたっているのはページ 3 です。FIFO なら最も古くに読み込んだページ 1 が追い出されます。' },
+    { q: 'ページ置換アルゴリズムの LRU の説明として、適切なものはどれか。',
+      choices: ['最も古くに主記憶に読み込まれたページを追い出す', '最後に参照されてから最も長い時間がたっているページを追い出す', '参照された回数が最も少ないページを追い出す', '最後に主記憶に読み込まれたページを追い出す'], answer: 1,
+      explain: 'LRU（Least Recently Used）は「最近いちばん使われていない」ページを追い出します。最も古くに読み込まれたページを追い出すのは FIFO、参照回数が最も少ないページを追い出すのは LFU です。' },
+    { q: 'ページ枠が2つあり、最初はすべて空である。ページを 1, 2, 1, 3, 2, 1 の順に参照するとき、LRU 方式でのページフォールトの回数は何回か。',
+      choices: ['3回', '4回', '5回', '6回'], answer: 2,
+      explain: '1, 2 で2回。1 はあるので0回（1 が最近使ったページになる）。3 で 2 を追い出し、2 で 1 を追い出し、1 で 3 を追い出す。合計 2 + 3 = 5回。FIFO なら4回です。枠の数を 2 にしてシミュレータで確かめられます。' },
+    { q: '主記憶の容量が不足し、ページインとページアウトが頻繁に起きて、システムの処理効率が急激に低下する現象を何というか。',
+      choices: ['スラッシング', 'フラグメンテーション', 'デッドロック', 'オーバーフロー'], answer: 0,
+      explain: 'スラッシングです。主記憶を増やす、同時に実行するプログラムを減らす、などで対処します。' },
+  ]);
+})();
+</script>
+</body>
+</html>

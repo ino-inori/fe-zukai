@@ -11,7 +11,7 @@ window.FE_TOPICS = [
   },
   {
     cat: 'アルゴリズムとデータ構造', items: [
-      { id: 'stack', title: 'スタックとキュー', desc: 'LIFOとFIFO、push/popの動き', freq: 3 },
+      { id: 'stack', title: 'スタックとキュー', desc: 'LIFOとFIFOの取り出し順、操作列の再生、逆ポーランド記法の計算', freq: 3, href: 'topics/stack-queue.html' },
       { id: 'tree', title: '木構造・2分探索木', desc: '走査順（先行・中間・後行）、ヒープ', freq: 3 },
       { id: 'sort', title: '整列（ソート）アルゴリズム', desc: 'バブル・選択・挿入・クイック・マージの比較', freq: 2 },
       { id: 'search', title: '探索と計算量', desc: '線形探索・2分探索・ハッシュ、O記法', freq: 2 },
@@ -20,7 +20,7 @@ window.FE_TOPICS = [
   },
   {
     cat: 'コンピュータ構成・システム', items: [
-      { id: 'cache', title: 'キャッシュと実効アクセス時間', desc: 'ヒット率を使った計算', freq: 3 },
+      { id: 'cache', title: 'キャッシュと実効アクセス時間', desc: '記憶階層、ヒット率を使った計算機、ヒット率の逆算', freq: 3, href: 'topics/cache.html' },
       { id: 'availability', title: '稼働率（直列・並列）', desc: 'MTBF/MTTR、構成図で直列・並列を計算、面積図で式の意味', freq: 3, href: 'topics/availability.html' },
       { id: 'cpu', title: 'CPUとパイプライン', desc: '命令実行サイクル、MIPS・クロック', freq: 2 },
       { id: 'raid', title: 'RAID', desc: 'RAID0/1/5の仕組みと容量', freq: 2 },
@@ -28,7 +28,7 @@ window.FE_TOPICS = [
   },
   {
     cat: 'OS', items: [
-      { id: 'paging', title: 'ページング・ページ置換', desc: 'FIFO/LRUでページフォールトを数える', freq: 3 },
+      { id: 'paging', title: 'ページング・ページ置換', desc: '仮想記憶の図、FIFO/LRUを1手ずつ比べてページフォールトを数える', freq: 3, href: 'topics/paging.html' },
       { id: 'process', title: 'プロセスの状態遷移', desc: '実行・実行可能・待ち状態', freq: 2 },
     ]
   },
