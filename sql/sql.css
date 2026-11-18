@@ -61,3 +61,48 @@ pre.sq-code {
   background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin: 6px 0; white-space: pre-wrap; word-break: break-all;
 }
 .sq-error { border-color: var(--ng); color: var(--ng); }
+
+/* ---- ホーム ---- */
+.sq-overall-nums { display: flex; gap: 22px; flex-wrap: wrap; }
+.sq-overall-nums .n { font-size: 28px; font-weight: 700; margin-right: 4px; }
+.sq-overall-nums .l { font-size: 14px; color: var(--muted); }
+.sq-bar { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 8px 0 2px; }
+.sq-bar i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 999px; transition: width .3s; }
+.sq-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 14px; }
+.sq-filter .seg { margin-bottom: 0; }
+.sq-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.sq-cat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.sq-cat-head {
+  display: flex; width: 100%; align-items: baseline; gap: 8px; border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--text); text-align: left;
+}
+.sq-cat-head .t { font-weight: 700; flex: 1; }
+.sq-cat-head:hover .t { color: var(--accent); text-decoration: underline; }
+.sq-cat-head .cnt { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.sq-cat .syn { font-size: 13px; color: var(--muted); line-height: 1.5; margin-top: 2px; font-family: "Consolas", "SFMono-Regular", "Menlo", "Yu Gothic UI", monospace; }
+.sq-cat .sq-bar { height: 6px; }
+.sq-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.sq-chip {
+  min-width: 34px; font: 13px "Consolas", monospace; padding: 2px 6px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.sq-chip:hover { border-color: var(--accent); }
+.sq-chip.ok { background: var(--ok-soft); border-color: var(--ok); }
+.sq-chip.ng { background: var(--ng-soft); border-color: var(--ng); }
+.sq-cat.empty { opacity: .55; box-shadow: none; }
+.sq-small { font-size: 13px; padding: 3px 10px; margin: 0 8px; }
+.sq-reset-row { margin-top: 28px; }
+
+/* ---- 出題のナビ ---- */
+.sq-nav .spacer { flex: 1; }
+.sq-set-label { font-size: 14px; color: var(--muted); }
+.sq-status { font-size: 13px; margin-left: auto; }
+.sq-status.ok { color: var(--ok); }
+.sq-status.ng { color: var(--ng); }
+
+/* ---- セット終了 ---- */
+.sq-done h2 { margin-top: 4px; }
+.sq-done-score { font-size: 22px; font-weight: 700; color: var(--accent); }
+.sq-done-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
+.sq-done-list li { font-size: 14px; }
+.sq-done-list a { cursor: pointer; }

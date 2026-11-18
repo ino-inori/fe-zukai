@@ -60,7 +60,9 @@
         if (t.href) el.href = t.href;
         const result = FE.store.get('quiz:' + t.id);
         let badge = '<span class="badge">準備中</span>';
-        if (t.href && t.badge) badge = `<span class="badge ready">${t.badge}</span>`;
+        const sqlSum = t.id === 'sql' ? FE.store.get('sql:summary') : null; // SQLクイズの成績（sql/js/progress.js が保存）
+        if (t.href && sqlSum && sqlSum.ok) badge = `<span class="badge done">${t.badge} ⭕${sqlSum.ok}/${sqlSum.total}</span>`;
+        else if (t.href && t.badge) badge = `<span class="badge ready">${t.badge}</span>`;
         else if (t.href) badge = result
           ? `<span class="badge done">確認問題 ${result.correct}/${result.total}</span>`
           : '<span class="badge ready">図解あり</span>';
