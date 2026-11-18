@@ -6,6 +6,7 @@ HTML / CSS / JavaScript のみ（ビルド不要）。確認問題はすべて�
 - `index.html` … トップページ（トピック一覧は `js/topics.js`）
 - `topics/` … 各トピックのページ
 - `js/common.js` … テーマ切替と確認問題の仕組み
+- `sql/` … SQLクイズ。入力した SQL をブラウザ内の SQLite（sql.js 1.10.3、`sql/vendor/` に同梱）で実行して採点。問題は `sql/data/problems.json`
 
 ローカルで見るときは、このフォルダで簡易サーバを起動してブラウザで開く。
 

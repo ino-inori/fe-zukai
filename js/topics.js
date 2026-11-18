@@ -35,7 +35,7 @@ window.FE_TOPICS = [
   {
     cat: 'データベース', items: [
       { id: 'normalize', title: '正規化', desc: '第1〜第3正規形、関数従属', freq: 3 },
-      { id: 'sql', title: 'SQL', desc: 'SELECT・JOIN・GROUP BY の結果を図で確認', freq: 3 },
+      { id: 'sql', title: 'SQL', desc: 'SQLクイズ：元の表と欲しい結果を見て SQL を書くと、その場で実行して採点', freq: 3, href: 'sql/', badge: 'SQLクイズ' },
       { id: 'transaction', title: 'トランザクションと排他制御', desc: 'ACID特性、ロック、デッドロック', freq: 2 },
     ]
   },

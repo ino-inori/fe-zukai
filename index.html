@@ -26,6 +26,7 @@
       <div><b>合格基準</b>科目A・科目Bともに 1000点満点中 600点以上</div>
     </div>
   </section>
+  <p class="note">SQL を自分で書いて練習したいときは <a href="sql/">SQLクイズ</a>（入力した SQL をその場で実行して採点）へ。</p>
 
   <h2>分野別トピック</h2>
   <div class="filter-row">
@@ -59,7 +60,8 @@
         if (t.href) el.href = t.href;
         const result = FE.store.get('quiz:' + t.id);
         let badge = '<span class="badge">準備中</span>';
-        if (t.href) badge = result
+        if (t.href && t.badge) badge = `<span class="badge ready">${t.badge}</span>`;
+        else if (t.href) badge = result
           ? `<span class="badge done">確認問題 ${result.correct}/${result.total}</span>`
           : '<span class="badge ready">図解あり</span>';
         el.innerHTML = `<div class="t">${t.title}</div><div class="d">${t.desc}</div>
