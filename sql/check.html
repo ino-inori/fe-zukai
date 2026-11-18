@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>問題データの検査 | SQLクイズ</title>
+<link rel="stylesheet" href="../css/style.css">
+<link rel="stylesheet" href="sql.css?v=2">
+<script src="../js/common.js"></script>
+<style>
+  .ck-summary { font-size: 18px; font-weight: 700; }
+  .ck-summary.ok { color: var(--ok); }
+  .ck-summary.ng { color: var(--ng); }
+  table.ck { border-collapse: collapse; font-size: 14px; width: 100%; }
+  table.ck th, table.ck td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; vertical-align: top; }
+  table.ck th { background: var(--surface-2); white-space: nowrap; }
+  table.ck td.c { text-align: center; white-space: nowrap; }
+  table.ck tr.bad td { background: var(--ng-soft); }
+  .pass { color: var(--ok); font-weight: 700; }
+  .fail { color: var(--ng); font-weight: 700; }
+  .warn { color: var(--on); font-weight: 700; }
+  .ck-detail { font-size: 13px; color: var(--ng); }
+  .ck-detail.w { color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="site-header"><div class="inner">
+  <a class="brand" href="../index.html">触って理解する<span>基本情報</span></a>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="theme-toggle" type="button">☾ ダーク</button>
+</div></header>
+
+<main>
+  <div class="crumb"><a href="../index.html">トップ</a> › <a href="./">SQLクイズ</a> › 問題データの検査</div>
+  <h1 class="page-title">問題データの検査</h1>
+  <p class="page-lead">data/problems.json の全問題を、出題画面と同じ採点のしくみ（js/grader.js）で検査します。問題を追加・修正したら、このページを開き直して全部 ✔ になることを確かめてください。</p>
+
+  <div class="card">
+    <div id="summary" class="ck-summary">検査中…</div>
+    <p class="note">検査項目：
+      ① 形式（必須の項目・難易度・表の数）
+      ② 模範解答が本データと別データの両方でエラーなく動く
+      ③ 模範解答が⭕になる
+      ④ 末尾の <code>;</code> を外すと△になる
+      ⑤ 綴りを崩す（SELECT→SELCT など）と△になる
+      ⑥ 別データの結果が空でない（<code>emptyOk</code> の問題を除く）
+      ⑦ ひっかけの誤答例（<code>trapSqls</code>）がすべて❌になる。
+      △ 注意：本データと別データの結果が同じ（値の直書きを見抜けない）。</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="ck">
+      <thead><tr><th>問</th><th>id</th><th>分類</th><th>①</th><th>②</th><th>③</th><th>④</th><th>⑤</th><th>⑥</th><th>⑦</th><th>メモ</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <div id="cats" class="card"></div>
+</main>
+
+<script src="vendor/sql.js-1.10.3/sql-wasm.js"></script>
+<script src="js/grader.js?v=2"></script>
+<script>
+(async function () {
+  'use strict';
+  const CATEGORIES = ['基本のSELECT', '条件指定', 'あいまい検索', 'NULL', '集計関数', 'グループ化', '結合', '副問合せ', 'データの変更', '表の定義', 'ビュー'];
+  const REQUIRED = ['id', 'category', 'difficulty', 'question', 'tables', 'answerSql', 'hint', 'explanation'];
+  const summary = document.getElementById('summary');
+  const tbody = document.getElementById('rows');
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+  let SQL, problems;
+  try {
+    const [wasm, data] = await Promise.all([
+      fetch('vendor/sql.js-1.10.3/sql-wasm.wasm').then(r => r.arrayBuffer()),
+      fetch('data/problems.json', { cache: 'no-store' }).then(r => r.json()),
+    ]);
+    SQL = await initSqlJs({ wasmBinary: wasm });
+    problems = data.problems;
+  } catch (e) {
+    summary.className = 'ck-summary ng';
+    summary.textContent = '読み込みに失敗しました（JSON の書き方の誤りかもしれません）: ' + (e && e.message || e);
+    return;
+  }
+  const grader = SQLGrader.createGrader(SQL);
+
+  // 綴りを崩した SQL を作る（SELECT があれば SELCT、無ければ最初の語の4文字目を消す）
+  function misspell(sql) {
+    if (/\bSELECT\b/.test(sql)) return sql.replace(/\bSELECT\b/, 'SELCT');
+    return sql.replace(/^(\s*)([A-Za-z]{3})[A-Za-z]/, '$1$2');
+  }
+  const isFk = res => /の外部キー$/.test(res.name || '');
+
+  const t0 = performance.now();
+  const seen = new Set();
+  let failCount = 0, warnCount = 0;
+  const catCount = {};
+
+  problems.forEach((p, i) => {
+    const errs = [], warns = [];
+    const r = { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true };
+    const fail = (k, msg) => { r[k] = false; errs.push(`${'①②③④⑤⑥⑦'[k - 1]} ${msg}`); };
+
+    // ① 形式
+    REQUIRED.forEach(k => { if (p[k] === undefined || p[k] === '') fail(1, `${k} がありません`); });
+    if (seen.has(p.id)) fail(1, `id「${p.id}」が重複しています`);
+    seen.add(p.id);
+    if (!CATEGORIES.includes(p.category)) fail(1, `分類「${p.category}」は一覧にありません`);
+    if (![1, 2, 3].includes(p.difficulty)) fail(1, '難易度は 1〜3');
+    const mode = SQLGrader.modeOf(p);
+    const nt = (p.tables || []).length;
+    if (nt > 3 || (mode !== 'structure' && nt < 1)) fail(1, `元の表の数が ${nt} 個（1〜3個）`);
+    if (mode !== 'select' && !(p.checkTables || []).length) fail(1, 'checkTables がありません');
+    if (mode !== 'structure' && !(p.altTables || []).length) fail(1, 'altTables（別データ）がありません');
+    (p.altTables || []).forEach(a => { if (!(p.tables || []).some(t => t.name === a.name)) fail(1, `altTables の「${a.name}」が tables にありません`); });
+    catCount[p.category] = (catCount[p.category] || 0) + 1;
+
+    if (r[1]) {
+      // ② 模範解答が動く
+      const exp = grader.expectedFor(p);
+      if (exp.main.error) fail(2, '本データでエラー: ' + exp.main.error);
+      if (exp.alt.error) fail(2, '別データでエラー: ' + exp.alt.error);
+      if (r[2]) {
+        // ③ ⭕になる
+        const g = grader.grade(p, p.answerSql);
+        if (g.verdict !== 'ok') fail(3, `判定が ${g.verdict}: ${g.message || (g.messages || []).join(' ')}`);
+        // ④ ; なしで△
+        const noSemi = p.answerSql.replace(/;\s*$/, '');
+        const g4 = grader.grade(p, noSemi);
+        if (g4.verdict !== 'close') fail(4, `判定が ${g4.verdict}: ${g4.message || ''}`);
+        // ⑤ 綴りミスで△
+        const typo = misspell(p.answerSql);
+        const g5 = grader.grade(p, typo);
+        if (typo === p.answerSql) fail(5, '綴りを崩せませんでした');
+        else if (g5.verdict !== 'close') fail(5, `「${typo.slice(0, 20)}…」の判定が ${g5.verdict}: ${g5.message || ''}`);
+        // ⑥ 別データが空でない
+        if (!p.emptyOk) {
+          exp.alt.results.forEach(res => { if (!isFk(res) && (res.missing || !res.rows.length)) fail(6, `別データで「${res.name || '結果'}」が空です`); });
+        }
+        // ⑦ ひっかけが❌
+        (p.trapSqls || []).forEach(sql => {
+          const gt = grader.grade(p, sql);
+          if (gt.verdict !== 'ng') fail(7, `誤答例が ${gt.verdict} になりました: ${sql}`);
+        });
+        // 注意：本データと別データが同じ結果
+        if (mode !== 'structure' && JSON.stringify(exp.main.results) === JSON.stringify(exp.alt.results)) warns.push('本データと別データの結果が同じです（値の直書きを見抜けません）');
+      } else { r[3] = r[4] = r[5] = r[6] = r[7] = null; }
+    } else { r[2] = r[3] = r[4] = r[5] = r[6] = r[7] = null; }
+
+    if (errs.length) failCount++;
+    if (warns.length) warnCount++;
+    const tr = el('tr', errs.length ? 'bad' : '');
+    tr.appendChild(el('td', 'c', String(i + 1)));
+    tr.appendChild(el('td', '', p.id));
+    tr.appendChild(el('td', '', p.category));
+    for (let k = 1; k <= 7; k++) {
+      const td = el('td', 'c');
+      if (k === 7 && r[7] && !(p.trapSqls || []).length) td.appendChild(el('span', 'note', '−'));
+      else td.appendChild(r[k] === null ? el('span', 'note', '−') : el('span', r[k] ? 'pass' : 'fail', r[k] ? '✔' : '✖'));
+      tr.appendChild(td);
+    }
+    const memo = el('td');
+    errs.forEach(m => memo.appendChild(el('div', 'ck-detail', m)));
+    warns.forEach(m => memo.appendChild(el('div', 'ck-detail w', '△ ' + m)));
+    if ((p.trapSqls || []).length && r[7]) memo.appendChild(el('div', 'ck-detail w', `誤答例 ${p.trapSqls.length} 件`));
+    tr.appendChild(memo);
+    tbody.appendChild(tr);
+  });
+
+  const ms = Math.round(performance.now() - t0);
+  const cats = document.getElementById('cats');
+  cats.appendChild(el('b', '', '分類ごとの問題数'));
+  const ul = el('ul');
+  CATEGORIES.forEach(c => {
+    const n = catCount[c] || 0;
+    const li = el('li', '', `${c}：${n} 問`);
+    if (n < 3) { li.appendChild(el('span', 'warn', '（3問未満）')); warnCount++; }
+    ul.appendChild(li);
+  });
+  cats.appendChild(ul);
+
+  summary.className = 'ck-summary ' + (failCount ? 'ng' : 'ok');
+  summary.textContent = failCount
+    ? `✖ ${problems.length} 問中 ${failCount} 問に問題があります（${ms} ミリ秒）`
+    : `✔ ${problems.length} 問すべて合格しました（${ms} ミリ秒）` + (warnCount ? `。注意 ${warnCount} 件` : '');
+  document.title = (failCount ? '✖ ' : '✔ ') + document.title;
+})();
+</script>
+</body>
+</html>

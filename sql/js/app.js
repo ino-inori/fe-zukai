@@ -86,19 +86,31 @@
 
     const src = $('source-tables');
     src.innerHTML = '';
-    p.tables.forEach(t => {
+    (p.tables || []).forEach(t => {
       src.appendChild(tableBox(t.name, `（${t.rows.length} 行）`, { columns: t.columns.map(c => c[0]), rows: t.rows }));
     });
+    if (!(p.tables || []).length) src.appendChild(el('p', 'note', '（元の表はありません。新しく表を作る問題です）'));
 
-    const exp = grader.expectedFor(p).main;
+    const expected = grader.expectedFor(p);
     const expBox = $('expected');
     expBox.innerHTML = '';
-    if (exp.error) expBox.appendChild(el('div', 'card sq-error', '模範解答を実行できませんでした（問題データの誤り）: ' + exp.error));
-    else expBox.appendChild(tableBox('欲しい出力結果', `（${exp.rows.length} 行）`, exp));
+    $('expected-title').textContent = { select: '欲しい出力結果', content: '欲しい出力結果（実行後の表）', structure: '欲しい出力結果（作る表の構造）' }[expected.mode];
+    if (expected.main.error) expBox.appendChild(el('div', 'card sq-error', '模範解答を実行できませんでした（問題データの誤り）: ' + expected.main.error));
+    else expected.main.results.forEach(res => {
+      if (isEmptyFk(res)) return;
+      expBox.appendChild(tableBox(res.name || '欲しい出力結果', `（${res.rows.length} 行）`, res));
+    });
     const notes = [];
-    notes.push(p.orderMatters ? '行の並び順も採点します。' : '行の並び順は問いません。');
-    if (p.compareColumnNames) notes.push('列名（見出し）も採点します。');
-    else notes.push('列名（見出し）は問いません。列の順番は合わせてください。');
+    if (expected.mode === 'select') {
+      notes.push(p.orderMatters ? '行の並び順も採点します。' : '行の並び順は問いません。');
+      if (p.compareColumnNames) notes.push('列名（見出し）も採点します。');
+      else notes.push('列名（見出し）は問いません。列の順番は合わせてください。');
+    } else if (expected.mode === 'content') {
+      notes.push('SQL を実行した後の表の中身を比べます。行の並び順は問いません。');
+      if (p.compareColumnNames) notes.push('ビューの列名も採点します。');
+    } else {
+      notes.push('作った表の列名・型・主キー・NOT NULL（と外部キー）を比べます。主キーの列は自動的に NOT NULL として扱います。');
+    }
     $('order-note').textContent = notes.join(' ');
 
     $('sql-input').value = '';
@@ -109,6 +121,9 @@
     $('next-btn').hidden = true;
     $('next-btn').textContent = index === problems.length - 1 ? '最初の問題へ →' : '次の問題へ →';
   }
+
+  // 外部キーが1つも無いときは、その表を表示しない
+  const isEmptyFk = res => /の外部キー$/.test(res.name || '') && !res.missing && res.rows && !res.rows.length;
 
   // ---------- 採点結果の表示 ----------
   function renderResult(r, p) {
@@ -140,12 +155,18 @@
         d.appendChild(el('pre', '', r.error));
         box.appendChild(d);
       }
-      const cmp = el('div', 'sq-compare');
-      if (r.user) cmp.appendChild(tableBox('あなたの実行結果', `（${r.user.rows.length} 行）`, r.user, r.expected));
-      else if (r.error) cmp.appendChild(tableBox('あなたの実行結果', '', { columns: ['エラー'], rows: [['実行できませんでした']] }));
-      cmp.appendChild(tableBox('欲しい出力結果', `（${r.expected.rows.length} 行）`, r.expected));
-      box.appendChild(cmp);
-      if (cmp.querySelector('tr.diff')) box.appendChild(el('p', 'note', '色の付いた行は、欲しい出力結果にない行です。'));
+      r.expected.forEach((exp, i) => {
+        const user = r.user && r.user[i];
+        if (isEmptyFk(exp) && (!user || isEmptyFk(user))) return;
+        const label = exp.name ? `：${exp.name}` : '';
+        const cmp = el('div', 'sq-compare');
+        if (user && user.missing) cmp.appendChild(tableBox('あなたの結果' + label, '', { columns: ['（なし）'], rows: [['見つかりません']] }));
+        else if (user) cmp.appendChild(tableBox('あなたの結果' + label, `（${user.rows.length} 行）`, user, exp));
+        else cmp.appendChild(tableBox('あなたの結果', '', { columns: ['エラー'], rows: [['実行できませんでした']] }));
+        cmp.appendChild(tableBox('欲しい結果' + label, `（${exp.rows.length} 行）`, exp));
+        box.appendChild(cmp);
+      });
+      if (box.querySelector('tr.diff')) box.appendChild(el('p', 'note', '色の付いた行は、欲しい出力結果にない行です。'));
       box.appendChild(el('p', 'note', '「答えを見る」で模範解答と解説を確認できます。'));
     }
     out.appendChild(box);
@@ -171,7 +192,7 @@
       const base = 'vendor/sql.js-1.10.3/';
       const [wasm, data] = await Promise.all([
         fetch(base + 'sql-wasm.wasm').then(res => { if (!res.ok) throw new Error('sql-wasm.wasm ' + res.status); return res.arrayBuffer(); }),
-        fetch('data/problems.json').then(res => { if (!res.ok) throw new Error('problems.json ' + res.status); return res.json(); }),
+        fetch('data/problems.json', { cache: 'no-cache' }).then(res => { if (!res.ok) throw new Error('problems.json ' + res.status); return res.json(); }),
       ]);
       // wasm を先に読み込んで渡すと、サーバーの MIME 設定に左右されずに起動できる
       const SQL = await initSqlJs({ wasmBinary: wasm });
